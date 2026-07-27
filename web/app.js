@@ -194,6 +194,9 @@
   function humanizeFetchError(error) {
     if (window.location.protocol === "file:") return DIRECT_FILE_MESSAGE;
     if (error instanceof TypeError) {
+      if (configuredApiUrl) {
+        return "The online calculation service could not be reached. Please try again in a moment.";
+      }
       return "The local Python calculator is no longer running. Close this tab, then double-click start_theta2_pbp_web.bat in the BMSZ folder.";
     }
     return error.message || "The calculation could not be completed.";
