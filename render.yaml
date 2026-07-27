@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: theta-atlas-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements-local.txt
+    startCommand: python theta2_pbp_web.py --host 0.0.0.0 --port $PORT --no-browser
+    healthCheckPath: /health

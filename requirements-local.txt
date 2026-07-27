@@ -1,0 +1,4 @@
+-r requirements.txt
+
+# Imported unconditionally by combunipotent/lsdrcgraph.py.
+ipython>=8.0

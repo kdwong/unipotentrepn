@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Explore fine lowest K-type theta-lift paths and their painted bipartitions."
+    />
+    <!--
+      Leave this empty for the local Python server. For GitHub Pages, set it to
+      the deployed backend URL, for example:
+      https://theta-atlas-api.onrender.com/api/calculate
+    -->
+    <meta name="theta-api-url" content="" />
+    <meta name="theme-color" content="#f4efe4" />
+    <title>Theta Atlas · Painted Bipartitions</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to calculator</a>
+
+    <header class="site-header">
+      <a class="brand" href="#" aria-label="Theta Atlas home">
+        <span class="brand-mark" aria-hidden="true">θ</span>
+        <span>
+          <span class="brand-name">Theta Atlas</span>
+          <span class="brand-note">BMSZ painted bipartitions</span>
+        </span>
+      </a>
+      <span class="local-badge"><span aria-hidden="true"></span><span class="runtime-label">Local computation</span></span>
+    </header>
+
+    <main id="main-content">
+      <section class="hero" aria-labelledby="page-title">
+        <div class="hero-copy">
+          <p class="eyebrow">Fine lowest K-types</p>
+          <h1 id="page-title">Follow every lift.<br /><em>See the common painting.</em></h1>
+          <p class="lede">
+            Enter a good-parity nilpotent orbit of <span class="math">Sp(2n)</span>.
+            The calculator finds the certified theta-lift paths to each
+            <span class="math">(1<sup>k</sup>0…0 | 0…0)</span> and gathers paths
+            that share the same painted bipartition for
+            <span class="math">SO(n,n+1)</span>. Both exact exterior
+            degrees <span class="math">k</span> and <span class="math">p-k</span>
+            are calculated; no answer is obtained by multiplying a count.
+          </p>
+        </div>
+
+        <div class="calculator-card">
+          <form id="orbit-form" novalidate>
+            <label for="orbit-input">
+              Dual nilpotent orbit <span class="math">O<sup>∨</sup></span>
+            </label>
+            <div class="input-row">
+              <div class="orbit-input-wrap">
+                <span aria-hidden="true">(</span>
+                <input
+                  id="orbit-input"
+                  name="orbit"
+                  type="text"
+                  value="6, 4, 2, 2, 2"
+                  inputmode="numeric"
+                  autocomplete="off"
+                  spellcheck="false"
+                  aria-describedby="orbit-hint orbit-error"
+                />
+                <span aria-hidden="true">)</span>
+              </div>
+              <button id="calculate-button" class="primary-button" type="submit">
+                <span class="button-label">Calculate</span>
+                <span class="button-arrow" aria-hidden="true">→</span>
+                <span class="button-spinner" aria-hidden="true"></span>
+              </button>
+            </div>
+            <p id="orbit-hint" class="field-hint">
+              Use decreasing even rows: <span class="math">6,4,2,2,2</span>
+              or the compact notation <span class="math">64222</span>. Use
+              commas when a row has two digits.
+            </p>
+            <p id="orbit-error" class="field-error" role="alert"></p>
+          </form>
+
+          <div class="examples" aria-label="Example orbits">
+            <span>Try an example</span>
+            <button type="button" class="example-chip" data-orbit="6,4,2,2">(6,4,2,2)</button>
+            <button type="button" class="example-chip" data-orbit="6,4,2,2,2">(6,4,2,2,2)</button>
+            <button type="button" class="example-chip" data-orbit="8,6,4,4,2,2,2,2">(8,6,4,4,2,2,2,2)</button>
+          </div>
+        </div>
+      </section>
+
+      <div id="status-region" class="status-region" aria-live="polite" aria-atomic="true"></div>
+
+      <section id="loading-view" class="loading-view" hidden aria-label="Calculating results">
+        <div class="loading-heading">
+          <span class="loading-orbit skeleton"></span>
+          <span class="loading-meta skeleton"></span>
+        </div>
+        <div class="loading-tower skeleton"></div>
+        <div class="loading-grid">
+          <div class="loading-card skeleton"></div>
+          <div class="loading-card skeleton"></div>
+        </div>
+      </section>
+
+      <section id="empty-view" class="empty-view" aria-label="Calculator introduction">
+        <div class="empty-glyph" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <p>One orbit unfolds into a tower of lifts.</p>
+        <span>Calculate to reveal its paths and tableaux.</span>
+      </section>
+
+      <section id="results-view" class="results-view" hidden aria-labelledby="results-title">
+        <header class="results-header">
+          <div>
+            <p class="eyebrow">Calculation complete</p>
+            <h2 id="results-title"></h2>
+            <p id="results-subtitle" class="results-subtitle"></p>
+          </div>
+          <div id="result-stats" class="result-stats" aria-label="Result summary"></div>
+        </header>
+
+        <section class="tower-panel" aria-labelledby="tower-title">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Derived chain</p>
+              <h3 id="tower-title">Theta tower</h3>
+            </div>
+            <p id="final-form" class="final-form"></p>
+          </div>
+          <div id="tower" class="tower" role="list" aria-label="Theta tower stages"></div>
+        </section>
+
+        <nav class="k-navigation" aria-label="Jump to fine lowest K-type">
+          <span>Fine K-type</span>
+          <div id="k-links"></div>
+        </nav>
+
+        <div id="k-results" class="k-results"></div>
+      </section>
+
+      <section class="sources" aria-labelledby="sources-title">
+        <div class="sources-heading">
+          <p class="section-kicker">Sources and credit</p>
+          <h2 id="sources-title">Built on the BMSZ program</h2>
+        </div>
+        <div class="source-list">
+          <p>
+            The painted-bipartition algorithms build on
+            <a href="https://github.com/jiajunma/unipotentrepn">Jia-Jun Ma’s
+            <code>unipotentrepn</code> GitHub repository</a>.
+          </p>
+          <ol>
+            <li>
+              D. Barbasch, J.-J. Ma, B. Sun, and C.-B. Zhu,
+              <a href="https://arxiv.org/abs/2205.05266"><cite>Special unipotent
+              representations of real classical groups: counting and
+              reduction</cite></a>.
+            </li>
+            <li>
+              D. Barbasch, J.-J. Ma, B. Sun, and C.-B. Zhu,
+              <a href="https://arxiv.org/abs/1712.05552"><cite>Special unipotent
+              representations of real classical groups: construction and
+              unitarity</cite></a>.
+            </li>
+          </ol>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span>Theta Atlas</span>
+      <span aria-hidden="true">·</span>
+      <span>Every displayed PBP(O<sup>∨</sup>, ℘) comes from an explicit certified path.</span>
+    </footer>
+
+    <template id="pbp-group-template">
+      <article class="pbp-group">
+        <header class="pbp-group-header">
+          <div class="pbp-number" aria-hidden="true"></div>
+          <div>
+            <p class="pbp-overline"></p>
+            <h4 class="pbp-title"></h4>
+          </div>
+          <div class="pbp-tags"></div>
+        </header>
+
+        <div class="tableaux-shell">
+          <div class="diagram-panel">
+            <div class="diagram-heading">
+              <span class="diagram-letter">P</span>
+              <span>Left diagram</span>
+            </div>
+            <div class="tableau tableau-p"></div>
+          </div>
+          <div class="diagram-divider" aria-hidden="true"><span>×</span></div>
+          <div class="diagram-panel">
+            <div class="diagram-heading">
+              <span class="diagram-letter">Q</span>
+              <span>Right diagram</span>
+            </div>
+            <div class="tableau tableau-q"></div>
+          </div>
+        </div>
+
+        <div class="marker-legend" aria-label="Tableau marker legend">
+          <span>markers</span>
+          <code title="* — dot / complex marker">•</code>
+          <code title="c — compact marker">c</code>
+          <code title="d — discrete marker">d</code>
+          <code title="s — s-paint">s</code>
+          <code title="r — r-paint">r</code>
+        </div>
+
+        <div class="paths-block">
+          <div class="paths-heading">
+            <h5></h5>
+            <button type="button" class="text-button toggle-paths">Open all</button>
+          </div>
+          <div class="paths-list"></div>
+        </div>
+      </article>
+    </template>
+  </body>
+</html>
