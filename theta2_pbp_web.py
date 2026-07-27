@@ -598,7 +598,7 @@ class ThetaPBPRequestHandler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         origin = self.headers.get("Origin", "").rstrip("/")
-        if origin in ALLOWED_ORIGINS:
+        if origin and self._origin_is_allowed():
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
 
@@ -606,7 +606,23 @@ class ThetaPBPRequestHandler(BaseHTTPRequestHandler):
         """Allow same-origin/no-Origin clients and explicitly trusted webpages."""
 
         origin = self.headers.get("Origin")
-        return origin is None or origin.rstrip("/") in ALLOWED_ORIGINS
+        if origin is None:
+            return True
+        normalized_origin = origin.rstrip("/")
+        if normalized_origin in ALLOWED_ORIGINS:
+            return True
+
+        parsed_origin = urlsplit(normalized_origin)
+        request_host = self.headers.get("Host", "").casefold()
+        return (
+            parsed_origin.scheme in {"http", "https"}
+            and parsed_origin.netloc.casefold() == request_host
+            and parsed_origin.path in {"", "/"}
+            and not parsed_origin.query
+            and not parsed_origin.fragment
+            and parsed_origin.username is None
+            and parsed_origin.password is None
+        )
 
 
 class ThetaPBPServer(ThreadingHTTPServer):

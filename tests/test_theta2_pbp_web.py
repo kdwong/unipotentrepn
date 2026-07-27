@@ -162,6 +162,22 @@ def test_http_api() -> None:
         assert document["final_form"] == {"p": 2, "q": 3}
         assert document["results"][0]["distinct_pbp_count"] == 2
 
+        local_origin = f"http://127.0.0.1:{server.server_address[1]}"
+        connection.request(
+            "POST",
+            "/api/calculate",
+            body=body,
+            headers={
+                "Content-Type": "application/json",
+                "Origin": local_origin,
+            },
+        )
+        response = connection.getresponse()
+        document = json.loads(response.read())
+        assert response.status == 200
+        assert response.getheader("Access-Control-Allow-Origin") == local_origin
+        assert document["final_form"] == {"p": 2, "q": 3}
+
         connection.request(
             "OPTIONS",
             "/api/calculate",
