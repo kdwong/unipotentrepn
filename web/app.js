@@ -51,7 +51,6 @@
   const calculateButton = document.querySelector("#calculate-button");
   const buttonLabel = calculateButton.querySelector(".button-label");
   const statusRegion = document.querySelector("#status-region");
-  const emptyView = document.querySelector("#empty-view");
   const loadingView = document.querySelector("#loading-view");
   const resultsView = document.querySelector("#results-view");
   const resultsTitle = document.querySelector("#results-title");
@@ -132,13 +131,11 @@
       renderResults(result);
       setLoading(false);
       resultsView.hidden = false;
-      emptyView.hidden = true;
       announce(`Calculation complete. Found ${result.results.length} fine K-types.`);
       resultsView.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "start" });
     } catch (error) {
       if (error.name === "AbortError") return;
       setLoading(false);
-      emptyView.hidden = resultsView.hidden === false;
       showError(humanizeFetchError(error));
     } finally {
       if (activeRequest === requestController) activeRequest = null;
@@ -210,7 +207,6 @@
 
     if (isLoading) {
       resultsView.hidden = true;
-      emptyView.hidden = true;
       clearError();
       announce(`Calculating the orbit (${orbit.join(", ")}). Larger orbits may take a moment.`);
     }

@@ -232,8 +232,10 @@ def test_http_api() -> None:
         assert 'name="final-orientation"' not in html
         assert "SO(n,n+1)" in html
         assert "Jia-Jun Ma" in html
-        assert "arxiv.org/abs/2205.05266" in html
-        assert "arxiv.org/abs/1712.05552" in html
+        assert "ems.press/journals/jems/articles/14298688" in html
+        assert "doi.org/10.1090/jams/1082" in html
+        assert 'id="empty-view"' not in html
+        assert "<footer>" not in html
 
         connection.request("GET", "/app.js")
         response = connection.getresponse()

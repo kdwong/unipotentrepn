@@ -428,49 +428,6 @@ h1 em {
   white-space: nowrap;
 }
 
-.empty-view {
-  min-height: 240px;
-  margin-bottom: 72px;
-  display: grid;
-  place-items: center;
-  align-content: center;
-  color: var(--ink-faint);
-  border-top: 1px solid var(--line);
-  text-align: center;
-}
-
-.empty-view p {
-  margin: 16px 0 2px;
-  color: var(--ink-soft);
-  font-family: var(--serif);
-  font-size: 20px;
-}
-
-.empty-view > span {
-  font-size: 12px;
-}
-
-.empty-glyph {
-  height: 46px;
-  display: flex;
-  align-items: flex-end;
-  gap: 4px;
-}
-
-.empty-glyph span {
-  width: 11px;
-  height: 11px;
-  display: block;
-  background: var(--paper-deep);
-  border: 1px solid var(--line-strong);
-  border-radius: 2px;
-}
-
-.empty-glyph span:nth-child(2) { height: 18px; }
-.empty-glyph span:nth-child(3) { height: 28px; }
-.empty-glyph span:nth-child(4) { height: 37px; }
-.empty-glyph span:nth-child(5) { height: 45px; background: var(--teal-light); border-color: #a4bdb5; }
-
 .loading-view {
   min-height: 520px;
   padding: 68px 0;
@@ -1275,18 +1232,6 @@ h1 em {
   font-family: var(--serif);
 }
 
-footer {
-  width: min(1180px, calc(100% - 48px));
-  margin: 0 auto;
-  padding: 28px 0 34px;
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-  color: var(--ink-faint);
-  border-top: 1px solid var(--line);
-  font-size: 11px;
-}
-
 .sources {
   margin: 70px 0 54px;
   padding: 34px 38px;
@@ -1317,15 +1262,6 @@ footer {
   margin-bottom: 16px;
 }
 
-.source-list ol {
-  margin: 0;
-  padding-left: 21px;
-}
-
-.source-list li + li {
-  margin-top: 12px;
-}
-
 .source-list a {
   color: var(--teal);
   text-decoration-color: rgb(22 79 75 / 35%);
@@ -1334,6 +1270,14 @@ footer {
 
 .source-list a:hover {
   text-decoration-color: currentColor;
+}
+
+.paper-references p {
+  margin: 0;
+}
+
+.paper-references p + p {
+  margin-top: 12px;
 }
 
 .sources-inline {
@@ -1399,8 +1343,7 @@ footer {
 
 @media (max-width: 640px) {
   .site-header,
-  main,
-  footer {
+  main {
     width: min(100% - 28px, 1180px);
   }
 
@@ -1551,25 +1494,18 @@ footer {
     display: none;
   }
 
-  footer {
-    align-items: center;
-    flex-direction: column;
-    text-align: center;
-  }
-
   .sources {
     margin: 48px 0 36px;
     padding: 24px 20px;
   }
 
-  footer span:nth-child(2) { display: none; }
 }
 
 @media print {
   :root { --paper: #fff; --surface: #fff; }
 
   body { background: #fff; }
-  .site-header, .hero, .empty-view, .loading-view, .k-navigation, footer, .toggle-paths { display: none !important; }
+  .site-header, .hero, .loading-view, .k-navigation, .toggle-paths { display: none !important; }
   main { width: 100%; }
   .results-view { padding: 0; border: 0; }
   .pbp-group, .tower-panel { break-inside: avoid; box-shadow: none; }
