@@ -19,7 +19,8 @@ always `SO(n,n+1)`; the opposite orientation is not calculated.
 Each `k` section shows:
 
 1. the exact right-trivial targets of degrees `k` and `p-k`;
-2. every packet-certified theta path reaching either target;
+2. every packet-certified concrete theta path, with one selected twist at each
+   orthogonal stage, reaching either target;
 3. the raw Ma tableau attached to each path; and
 4. grouping only after equality of the actual `(tau_wp,wp)` parameters has
    been checked.
@@ -53,9 +54,9 @@ two exact endpoint types are
 (111110|0000000)
 ```
 
-Ten certified paths reach these two endpoint types and are grouped into two
-different PBPs.  The page obtains both from Ma's calculation; it does not
-manufacture four representations by multiplying counts.
+Twelve concrete theta paths reach these two endpoint types and are grouped
+into two different PBPs.  The page obtains both from Ma's calculation; it
+does not manufacture four representations by multiplying counts.
 
 ## Run the Python report
 
@@ -105,7 +106,15 @@ are
 The program constructs both.  Only after their theta paths and PBPs are known
 does it put them under the common connected highest-weight label `1^k`.
 When `p=2k`, the two exact exterior degrees coincide, but every concrete
-character-twist history is still expanded before PBP deduplication.
+character-twist history is still expanded and counted as its own theta path
+before PBP deduplication.  Internal `FineKChain` objects may group `tt` and
+`dt` when they have the same VALUE output, but that grouping is never used as
+the displayed path count.
+
+For example, `O^vee=(4,2,2)` has seven internal `FineKChain` skeletons but
+eight concrete theta paths.  The middle-degree histories
+`O(2,1) tt -> O(4,5) tt` and `O(2,1) tt -> O(4,5) dt` are displayed and counted
+as two paths because they reach different painted bipartitions.
 
 The final endpoint printed on each path is full-dimensional.  Thus a path in
 the `k=1` group for `O(6,7)` ends in either
@@ -210,7 +219,7 @@ used to create paths or PBPs.  For the fixed `SO(n,n+1)` convention,
 the rule agrees in all `261/261` fine-K bins for the 66 all-even orbits through
 total orbit size `16`.  This is a bounded computational check, not a proof of
 the rule in arbitrary rank.  Every displayed number still comes solely from
-certified paths and deduplication of their raw Ma PBPs.
+packet-certified concrete theta paths and deduplication of their raw Ma PBPs.
 
 ## Verification commands
 

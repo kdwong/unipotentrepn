@@ -14,7 +14,9 @@ from combunipotent.drc import reg_drc
 from combunipotent.drclift import gp_form_B_ext
 from standalone import build_pbp_bijection, dpart2Wrepns_with_wp, drc_shape
 from theta2_pbp import (
+    candidate_concrete_path_count,
     calculate,
+    concrete_theta_paths,
     determinant_twist_wedge,
     derive_chain_totals,
     enumerate_fine_k_chains,
@@ -129,13 +131,15 @@ def test_single_row_trivial_family_matches_complete_ma_packets() -> None:
         )
 
 
-def test_2x6_k1_has_ten_paths_and_two_pbps() -> None:
+def test_2x6_k1_has_twelve_concrete_paths_and_two_pbps() -> None:
     orbit = (2, 2, 2, 2, 2, 2)
     _, totals, chains, results = calculate(orbit)
     assert totals == (1, 2, 5, 6, 9, 10, 13)
 
     k1_paths = chains["(100|000)"]
+    # Ten internal VALUE skeletons expand to twelve selected-twist paths.
     assert len(k1_paths) == 10
+    assert len(concrete_theta_paths(results["(100|000)"])) == 12
     assert {path.final_left_degree for path in k1_paths} == {1, 5}
     assert {path.final_exact_label for path in k1_paths} == {
         "(100000|0000000)",
@@ -227,6 +231,46 @@ def test_cross_path_dedup_and_empty_bin() -> None:
     assert totals == (3, 4, 9)
     assert len(chains["(10|00)"]) == 4
     assert len(so_keys(results["(10|00)"])) == 2
+    candidate_chains = enumerate_fine_k_chains(totals)
+    concrete_counts = {
+        label: len(concrete_theta_paths(label_results))
+        for label, label_results in results.items()
+    }
+    candidate_counts = {
+        label: candidate_concrete_path_count(label_chains)
+        for label, label_chains in candidate_chains.items()
+    }
+    assert concrete_counts == {
+        "(00|00)": 2,
+        "(10|00)": 4,
+        "(11|00)": 2,
+    }
+    assert candidate_counts == concrete_counts
+    assert sum(concrete_counts.values()) == 8
+
+    middle_paths = concrete_theta_paths(results["(11|00)"])
+    assert [path.history for path in middle_paths] == [
+        ("tt", "dt"),
+        ("tt", "tt"),
+    ]
+    assert len(
+        {
+            pbp.so_parameter_key
+            for path in middle_paths
+            for pbp in path.painted_bipartitions
+        }
+    ) == 2
+
+    captured = io.StringIO()
+    with contextlib.redirect_stdout(captured):
+        print_report(orbit, totals, chains, results)
+    report = captured.getvalue()
+    assert (
+        "packet-certified concrete theta paths of coarse connected-K type "
+        "(11|00): 2 (from 2 concrete VALUE candidates)"
+    ) in report
+    assert "O(2,1) tt -> O(4,5) tt" in report
+    assert "O(2,1) tt -> O(4,5) dt" in report
     assert_orbit_membership(orbit, results, (4, 5))
 
     _, totals_44, chains_44, results_44 = calculate((4, 4), final_form=(4, 5))
@@ -276,7 +320,7 @@ def main() -> None:
     tests = (
         test_orbit_4_so23_has_two_actual_pbps,
         test_single_row_trivial_family_matches_complete_ma_packets,
-        test_2x6_k1_has_ten_paths_and_two_pbps,
+        test_2x6_k1_has_twelve_concrete_paths_and_two_pbps,
         test_6422_complements_are_computed_not_multiplied,
         test_64222_raw_wp_shape_and_middle_degree,
         test_concrete_twists_and_lowest_harmonics_are_printed,

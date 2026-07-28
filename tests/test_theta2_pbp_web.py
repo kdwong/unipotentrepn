@@ -43,8 +43,10 @@ def test_explicit_paths_grouping_fixed_form_and_cache() -> None:
 
     k0 = payload["results"][0]
     assert k0["k"] == 0
-    assert k0["candidate_count"] == 2
-    assert k0["certified_count"] == 2
+    assert k0["candidate_concrete_path_count"] == 2
+    assert k0["concrete_path_count"] == 2
+    assert "candidate_count" not in k0
+    assert "certified_count" not in k0
     assert k0["distinct_pbp_count"] == 2
     assert k0["o_wedge_degrees"] == [0, 2]
     assert "full_o_extension_count" not in k0
@@ -70,7 +72,7 @@ def test_explicit_paths_grouping_fixed_form_and_cache() -> None:
     repeated = serialize_calculation((2, 2, 2, 2, 2, 2))
     k1 = repeated["results"][1]
     assert k1["distinct_pbp_count"] == 2
-    assert k1["certified_count"] == 10
+    assert k1["concrete_path_count"] == 12
     assert k1["o_wedge_degrees"] == [1, 5]
     assert {
         path["final"]["exact_label"]
@@ -129,6 +131,36 @@ def test_explicit_paths_grouping_fixed_form_and_cache() -> None:
             for step in steps
         )
         assert not any("base L=" in step or "twist options[" in step for step in steps)
+
+    boundary = serialize_calculation((4, 2, 2))
+    assert [section["concrete_path_count"] for section in boundary["results"]] == [
+        2,
+        4,
+        2,
+    ]
+    assert [
+        section["candidate_concrete_path_count"]
+        for section in boundary["results"]
+    ] == [2, 4, 2]
+    assert sum(
+        section["concrete_path_count"] for section in boundary["results"]
+    ) == 8
+    assert sum(
+        section["distinct_so_pbp_count"] for section in boundary["results"]
+    ) == 6
+    boundary_middle = boundary["results"][2]
+    middle_paths = [
+        path
+        for group in boundary_middle["groups"]
+        for path in group["paths"]
+    ]
+    assert len(middle_paths) == 2
+    assert {path["number"] for path in middle_paths} == {1, 2}
+    assert {
+        tuple(path["concrete_realizations"][0]["twist_history"])
+        for path in middle_paths
+    } == {("tt", "tt"), ("tt", "dt")}
+    assert all(len(path["concrete_realizations"]) == 1 for path in middle_paths)
 
     multistage = serialize_calculation((6, 4, 2, 2))
     first_multistage_realization = (
@@ -244,6 +276,7 @@ def test_http_api() -> None:
         assert 'body: JSON.stringify({ orbit })' in javascript
         assert "final-orientation" not in javascript
         assert "pathHistoryPreview(path.realizations)" in javascript
+        assert 'makeStat(totalPaths, "concrete theta paths")' in javascript
         connection.close()
     finally:
         server.shutdown()

@@ -17,7 +17,7 @@ The program has two independent layers:
    system and DRC theta lifts, and attaches the resulting final painted
    bipartitions.  Exact DRC/packet edges are preferred; a cross-source local-
    system coincidence is used only when it has a unique PBP target.  Ambiguous
-   candidate paths are omitted.  Ma's raw final DRC is retained as
+   ambiguous candidates are omitted.  Ma's raw final DRC is retained as
    ``tau_wp in PBP(O^vee, wp)``.  The BMSZ bijection is used only to recover
    and certify ``wp``; its auxiliary transport to the ``wp=empty`` shape is
    never substituted for the actual tableau.
@@ -357,6 +357,21 @@ class ChainPBPResult:
 
     chain: FineKChain
     histories_by_pbp: dict[PaintedBipartition, set[TwistHistory]]
+
+
+@dataclass(frozen=True)
+class ConcreteThetaPath:
+    """One theta path with every orthogonal twist concretely selected.
+
+    ``FineKChain`` deliberately groups determinant twists that have the same
+    VALUE output.  That grouping is useful internally, but it must never lower
+    the user-facing path count: two selected twist histories can reach
+    different painted bipartitions even when their lowest K-types coincide.
+    """
+
+    chain: FineKChain
+    history: TwistHistory
+    painted_bipartitions: tuple[PaintedBipartition, ...]
 
 
 @dataclass(frozen=True)
@@ -1103,6 +1118,61 @@ def compute_chain_pbps(
     return ChainPBPResult(chain, histories_by_pbp)
 
 
+def concrete_theta_paths(
+    results: Iterable[ChainPBPResult],
+) -> tuple[ConcreteThetaPath, ...]:
+    """Expand grouped chain objects into user-facing concrete theta paths."""
+
+    numbered_results = tuple(enumerate(results))
+    paths = []
+    for _result_number, result in sorted(
+        numbered_results,
+        key=lambda item: (item[1].chain.final_left_degree, item[0]),
+    ):
+        histories = sorted(
+            {
+                history
+                for pbp_histories in result.histories_by_pbp.values()
+                for history in pbp_histories
+            }
+        )
+        for history in histories:
+            painted_bipartitions = tuple(
+                sorted(
+                    (
+                        pbp
+                        for pbp, pbp_histories in result.histories_by_pbp.items()
+                        if history in pbp_histories
+                    ),
+                    key=lambda pbp: (
+                        pbp.extended_drc,
+                        pbp.primitive_pair_indices,
+                        pbp.outer_det_twist,
+                    ),
+                )
+            )
+            paths.append(
+                ConcreteThetaPath(
+                    chain=result.chain,
+                    history=history,
+                    painted_bipartitions=painted_bipartitions,
+                )
+            )
+    return tuple(paths)
+
+
+def candidate_concrete_path_count(chains: Iterable[FineKChain]) -> int:
+    """Count VALUE candidates after selecting every grouped twist option."""
+
+    total = 0
+    for chain in chains:
+        history_count = len(chain.final_twist_labels)
+        for transition in chain.transitions:
+            history_count *= len(transition.twist_labels)
+        total += history_count
+    return total
+
+
 def orbit_pbp_shape(partition: Iterable[int]) -> tuple[tuple[int, ...], tuple[int, ...]]:
     """Return the ``wp=empty`` reference shape read from ``O^vee``.
 
@@ -1259,46 +1329,34 @@ def print_report(
         chain_totals,
         (final_p, final_q),
     )
-    for k, (label, chains) in enumerate(chains_by_label.items()):
+    for k, label in enumerate(chains_by_label):
         results = results_by_label[label]
-        candidate_count = len(candidate_chains_by_label[label])
+        concrete_paths = concrete_theta_paths(results)
+        candidate_count = candidate_concrete_path_count(
+            candidate_chains_by_label[label]
+        )
         wedge_degrees = o_wedge_degrees_for_connected_type(final_p, k)
         print(
-            f"certified chains of coarse connected-K type {label}: {len(chains)} "
-            f"(from {candidate_count} VALUE candidates)"
+            f"packet-certified concrete theta paths of coarse connected-K "
+            f"type {label}: {len(concrete_paths)} "
+            f"(from {candidate_count} concrete VALUE candidates)"
         )
         print(f"  exact right-trivial O({final_p}) exterior degrees: {wedge_degrees}")
-        numbered_results = tuple(enumerate(results, start=1))
-        for path_number, result in sorted(
-            numbered_results,
-            key=lambda item: (item[1].chain.final_left_degree, item[0]),
-        ):
+        for path_number, path in enumerate(concrete_paths, start=1):
             print(f"  path {path_number}:")
+            print(
+                "    concrete twist history: "
+                + concrete_history_text(path.history, path.chain)
+            )
+            print(
+                "      theta-lift chain: "
+                + " -> ".join(path.chain.display_steps(path.history))
+            )
             for pbp_number, pbp in enumerate(
-                sorted(
-                    result.histories_by_pbp,
-                    key=lambda item: (
-                        item.extended_drc,
-                        item.primitive_pair_indices,
-                        item.outer_det_twist,
-                    ),
-                ),
+                path.painted_bipartitions,
                 start=1,
             ):
                 print(f"    SO PBP hit {pbp_number}: {pbp.one_line()}")
-                histories = sorted(result.histories_by_pbp[pbp])
-                for realization_number, history in enumerate(histories, start=1):
-                    realization_suffix = (
-                        f" {realization_number}" if len(histories) > 1 else ""
-                    )
-                    print(
-                        f"      concrete twist history{realization_suffix}: "
-                        + concrete_history_text(history, result.chain)
-                    )
-                    print(
-                        "        theta-lift chain: "
-                        + " -> ".join(result.chain.display_steps(history))
-                    )
                 print(f"      raw PBP(O^vee, wp) extended DRC: {pbp.extended_drc!r}")
                 if show_diagrams:
                     for line in str_dgms(pbp.extended_drc).splitlines():
@@ -1346,7 +1404,11 @@ def calculate(
     partition: Iterable[int],
     final_form: tuple[int, int] | None = None,
 ):
-    """Return packet-certified chains and PBPs for an all-even partition."""
+    """Return packet-certified grouped chain results and their PBPs.
+
+    Use :func:`concrete_theta_paths` to obtain the user-facing selected-twist
+    path enumeration from any label's grouped results.
+    """
 
     part = validate_dual_orbit(partition)
     totals = derive_chain_totals(part)

@@ -12,8 +12,8 @@
  *   "results": [{
  *     "k": 4,
  *     "label": "(1111000|00000000)",
- *     "candidate_count": 7,
- *     "certified_count": 7,
+ *     "candidate_concrete_path_count": 8,
+ *     "concrete_path_count": 8,
  *     "groups": [{
  *       "pbp": {
  *         "p": ["***", "**", "c", "c"],
@@ -329,13 +329,21 @@
           normalizeGroup({ key: groupKey, ...(group || {}) }, groupIndex),
         );
 
-    const certifiedCount = numberOr(
-      section.certified_count ?? section.certifiedCount ?? section.path_count ?? section.pathCount,
+    const concretePathCount = numberOr(
+      section.concrete_path_count
+        ?? section.concretePathCount
+        ?? section.certified_count
+        ?? section.certifiedCount
+        ?? section.path_count
+        ?? section.pathCount,
       uniquePathCount(groups),
     );
-    const candidateCount = numberOr(
-      section.candidate_count ?? section.candidateCount,
-      certifiedCount,
+    const candidateConcretePathCount = numberOr(
+      section.candidate_concrete_path_count
+        ?? section.candidateConcretePathCount
+        ?? section.candidate_count
+        ?? section.candidateCount,
+      concretePathCount,
     );
     const distinctSoPbpCount = numberOr(
       section.distinct_so_pbp_count ?? section.distinctSoPbpCount ?? section.distinct_pbp_count,
@@ -346,8 +354,8 @@
     return {
       k,
       label: label || constructLabel(k, finalForm),
-      certifiedCount,
-      candidateCount,
+      concretePathCount,
+      candidateConcretePathCount,
       distinctSoPbpCount,
       oWedgeDegrees,
       middleDegree: Boolean(section.middle_degree ?? section.middleDegree),
@@ -532,11 +540,11 @@
       : ` · ${data.allowedBipartitionShapes.length} legitimate ℘-dependent PBP shapes`;
     resultsSubtitle.textContent = `A good-parity orbit in Sp(${data.orbit.reduce((a, b) => a + b, 0)}, ℂ)${shapeNote}`;
 
-    const totalPaths = data.results.reduce((sum, section) => sum + section.certifiedCount, 0);
+    const totalPaths = data.results.reduce((sum, section) => sum + section.concretePathCount, 0);
     const totalPbps = data.results.reduce((sum, section) => sum + section.distinctSoPbpCount, 0);
     resultStats.replaceChildren(
       makeStat(data.results.length, "K-types"),
-      makeStat(totalPaths, "certified paths"),
+      makeStat(totalPaths, "concrete theta paths"),
       makeStat(totalPbps, "painted bipartitions"),
     );
 
@@ -593,11 +601,15 @@
     counts.append(
       strongText(section.distinctSoPbpCount),
       document.createTextNode(` painted bipartition${plural(section.distinctSoPbpCount)} · `),
-      strongText(section.certifiedCount),
-      document.createTextNode(` packet-certified path${plural(section.certifiedCount)}`),
+      strongText(section.concretePathCount),
+      document.createTextNode(` concrete theta path${plural(section.concretePathCount)}`),
     );
-    if (section.candidateCount !== section.certifiedCount) {
-      counts.append(document.createTextNode(` from ${section.candidateCount} candidates`));
+    if (section.candidateConcretePathCount !== section.concretePathCount) {
+      counts.append(
+        document.createTextNode(
+          ` from ${section.candidateConcretePathCount} concrete VALUE candidates`,
+        ),
+      );
     }
     counts.title = `Exact label ${section.label}`;
     header.append(type, counts);
@@ -616,12 +628,12 @@
       );
     }
 
-    if (section.candidateCount > section.certifiedCount) {
-      const omitted = section.candidateCount - section.certifiedCount;
+    if (section.candidateConcretePathCount > section.concretePathCount) {
+      const omitted = section.candidateConcretePathCount - section.concretePathCount;
       const note = element("p", "certification-note");
       note.append(
-        strongText(`${omitted} ambiguous VALUE candidate${plural(omitted)} omitted.`),
-        document.createTextNode(" Only packet-certified paths are shown below."),
+        strongText(`${omitted} ambiguous concrete VALUE candidate${plural(omitted)} omitted.`),
+        document.createTextNode(" Only packet-certified concrete theta paths are shown below."),
       );
       article.append(note);
     }
@@ -630,12 +642,12 @@
       (total, group) => total + group.paths.length,
       0,
     );
-    if (groupedPathOccurrences > section.certifiedCount) {
+    if (groupedPathOccurrences > section.concretePathCount) {
       article.append(
         element(
           "p",
           "multi-pbp-note",
-          "A path can realize more than one painted bipartition through different concrete twists. Its original path number is repeated in every group it reaches.",
+          "A concrete theta path can reach more than one painted bipartition. Its original path number is repeated in every group it reaches.",
         ),
       );
     }
@@ -656,7 +668,7 @@
     const card = fragment.querySelector(".pbp-group");
     const number = String(index + 1).padStart(2, "0");
     fragment.querySelector(".pbp-number").textContent = number;
-    fragment.querySelector(".pbp-overline").textContent = `${group.paths.length} path occurrence${plural(group.paths.length)} for this SO parameter`;
+    fragment.querySelector(".pbp-overline").textContent = `${group.paths.length} concrete theta path${plural(group.paths.length)} for this SO parameter`;
     fragment.querySelector(".pbp-title").textContent = `Painted bipartition ${number}`;
 
     const tags = fragment.querySelector(".pbp-tags");
@@ -670,7 +682,7 @@
     renderTableau(fragment.querySelector(".tableau-q"), group.pbp.q, "Q");
 
     fragment.querySelector(".paths-heading h5").textContent =
-      `${group.paths.length} packet-certified lifting path${plural(group.paths.length)}`;
+      `${group.paths.length} concrete theta path${plural(group.paths.length)}`;
     const list = fragment.querySelector(".paths-list");
     [...group.paths]
       .sort((left, right) => left.leftDegree - right.leftDegree || left.number - right.number)

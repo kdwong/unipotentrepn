@@ -4,7 +4,7 @@
 Run this file, then open the printed address in a browser.  The server uses
 only Python's standard library; all mathematical work is delegated to
 ``theta2_pbp.calculate`` so the command-line and browser interfaces share the
-same certified-chain computation.
+same packet-certified concrete-path computation.
 """
 
 from __future__ import annotations
@@ -60,11 +60,13 @@ _relaunch_in_project_venv()
 
 
 from theta2_pbp import (  # noqa: E402 (the venv relaunch must happen first)
-    ChainPBPResult,
+    ConcreteThetaPath,
     FineKChain,
     PaintedBipartition,
+    candidate_concrete_path_count,
     calculate,
     concrete_history_text,
+    concrete_theta_paths,
     enumerate_fine_k_chains,
     o_wedge_degrees_for_connected_type,
     orbit_pbp_shape,
@@ -204,49 +206,41 @@ def _pbp_sort_key(pbp: PaintedBipartition) -> tuple[Any, ...]:
 
 
 def _serialize_group_path(
-    result: ChainPBPResult,
+    path: ConcreteThetaPath,
     path_number: int,
     k: int,
     pbp: PaintedBipartition,
 ) -> dict[str, Any]:
-    histories = sorted(result.histories_by_pbp[pbp])
+    history = path.history
     concrete_realizations = [
         {
             "twist_history": list(history),
-            "twist_history_text": concrete_history_text(history, result.chain),
-            "steps": _chain_steps(result.chain, history),
+            "twist_history_text": concrete_history_text(history, path.chain),
+            "steps": _chain_steps(path.chain, history),
         }
-        for history in histories
     ]
-    preview_steps = (
-        concrete_realizations[0]["steps"]
-        if concrete_realizations
-        else _chain_steps(result.chain)
-    )
+    preview_steps = concrete_realizations[0]["steps"]
     serialized = {
         "id": path_number,
         "stable_id": f"k{k}-path-{path_number}",
         "name": f"Path {path_number}",
         "number": path_number,
-        "target_label": result.chain.final_exact_label,
-        "left_degree": result.chain.final_left_degree,
+        "target_label": path.chain.final_exact_label,
+        "left_degree": path.chain.final_left_degree,
         "text": " -> ".join(preview_steps),
         # Retain one concrete chain here for older clients.  New clients use
         # concrete_realizations so a displayed final twist can never be a
         # grouped list of alternatives.
         "steps": preview_steps,
         "concrete_realizations": concrete_realizations,
-        "twist_histories": [list(history) for history in histories],
-        "twist_history_texts": [
-            concrete_history_text(history, result.chain)
-            for history in histories
-        ],
+        "twist_histories": [list(history)],
+        "twist_history_texts": [concrete_history_text(history, path.chain)],
         "outer_epsilon": pbp.outer_det_twist,
         "outer_epsilon_label": (
             "det" if pbp.outer_det_twist else "trivial"
         ),
     }
-    serialized.update(_serialize_chain_structure(result.chain))
+    serialized.update(_serialize_chain_structure(path.chain))
     return serialized
 
 
@@ -288,14 +282,18 @@ def _serialize_uncached(
 
     labels = []
     for k, (label, results) in enumerate(results_by_label.items()):
+        concrete_paths = concrete_theta_paths(results)
+        candidate_path_count = candidate_concrete_path_count(
+            candidate_chains[label]
+        )
         grouped: dict[
             tuple[Any, ...],
-            list[tuple[int, ChainPBPResult, PaintedBipartition]],
+            list[tuple[int, ConcreteThetaPath, PaintedBipartition]],
         ] = {}
-        for path_number, result in enumerate(results, start=1):
-            for pbp in result.histories_by_pbp:
+        for path_number, path in enumerate(concrete_paths, start=1):
+            for pbp in path.painted_bipartitions:
                 grouped.setdefault(pbp.so_parameter_key, []).append(
-                    (path_number, result, pbp)
+                    (path_number, path, pbp)
                 )
 
         groups = []
@@ -312,8 +310,8 @@ def _serialize_uncached(
             )
             pbp = occurrences[0][2]
             paths = [
-                _serialize_group_path(result, path_number, k, parameter)
-                for path_number, result, parameter in occurrences
+                _serialize_group_path(path, path_number, k, parameter)
+                for path_number, path, parameter in occurrences
             ]
             reached_extensions = sorted(
                 {parameter.outer_det_twist for _, _, parameter in occurrences}
@@ -340,8 +338,8 @@ def _serialize_uncached(
             {
                 "k": k,
                 "label": label,
-                "candidate_count": len(candidate_chains[label]),
-                "certified_count": len(results),
+                "candidate_concrete_path_count": candidate_path_count,
+                "concrete_path_count": len(concrete_paths),
                 "distinct_pbp_count": len(groups),
                 "distinct_so_pbp_count": len(groups),
                 "o_wedge_degrees": list(wedge_degrees),
