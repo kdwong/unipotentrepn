@@ -43,8 +43,8 @@ def test_explicit_paths_grouping_fixed_form_and_cache() -> None:
 
     k0 = payload["results"][0]
     assert k0["k"] == 0
-    assert k0["candidate_concrete_path_count"] == 2
     assert k0["concrete_path_count"] == 2
+    assert "candidate_concrete_path_count" not in k0
     assert "candidate_count" not in k0
     assert "certified_count" not in k0
     assert k0["distinct_pbp_count"] == 2
@@ -89,6 +89,15 @@ def test_explicit_paths_grouping_fixed_form_and_cache() -> None:
         for group in k1["groups"]
         for path in group["paths"]
     )
+
+    all_balanced = serialize_calculation((2, 2, 2, 2, 2, 2, 2))
+    assert [
+        section["concrete_path_count"]
+        for section in all_balanced["results"]
+    ] == [2, 14, 42, 70]
+    balanced_k1 = all_balanced["results"][1]
+    assert balanced_k1["distinct_so_pbp_count"] == 2
+    assert sorted(group["path_count"] for group in balanced_k1["groups"]) == [7, 7]
 
     raw_shape = serialize_calculation((6, 4, 2, 2, 2))
     allowed = {
@@ -138,10 +147,6 @@ def test_explicit_paths_grouping_fixed_form_and_cache() -> None:
         4,
         2,
     ]
-    assert [
-        section["candidate_concrete_path_count"]
-        for section in boundary["results"]
-    ] == [2, 4, 2]
     assert sum(
         section["concrete_path_count"] for section in boundary["results"]
     ) == 8

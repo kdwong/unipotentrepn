@@ -721,17 +721,6 @@ h1 em {
   font-weight: 720;
 }
 
-.certification-note {
-  margin: -10px 0 20px;
-  padding: 9px 12px;
-  color: #765026;
-  background: var(--gold-light);
-  border: 1px solid #dfc98f;
-  border-radius: 7px;
-  font-size: 11px;
-  line-height: 1.5;
-}
-
 .multi-pbp-note {
   margin: -10px 0 20px;
   padding: 9px 12px;
@@ -741,10 +730,6 @@ h1 em {
   border-radius: 7px;
   font-size: 11px;
   line-height: 1.5;
-}
-
-.certification-note strong {
-  font-weight: 760;
 }
 
 .pbp-groups {

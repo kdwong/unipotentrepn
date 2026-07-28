@@ -19,8 +19,8 @@ always `SO(n,n+1)`; the opposite orientation is not calculated.
 Each `k` section shows:
 
 1. the exact right-trivial targets of degrees `k` and `p-k`;
-2. every packet-certified concrete theta path, with one selected twist at each
-   orthogonal stage, reaching either target;
+2. every concrete theta path propagated by Ma's representation lift, with one
+   selected twist at each orthogonal stage, reaching either target;
 3. the raw Ma tableau attached to each path; and
 4. grouping only after equality of the actual `(tau_wp,wp)` parameters has
    been checked.
@@ -57,6 +57,19 @@ two exact endpoint types are
 Twelve concrete theta paths reach these two endpoint types and are grouped
 into two different PBPs.  The page obtains both from Ma's calculation; it
 does not manufacture four representations by multiplying counts.
+
+For the fully balanced seven-row example `O^vee=(2,2,2,2,2,2,2)`, the four
+`k` sections contain respectively
+
+```text
+2, 14, 42, 70
+```
+
+concrete paths.  In the `k=1` section, all seven singleton subsets specialize
+to `P=(*,c,c), Q=(*,d,d,d), gamma=B-`, and all seven six-element complements
+specialize to `P=(*,*,c), Q=(*,*,d,d), gamma=B-`.  No history is hidden when
+the intermediate balanced packet contains several DRCs with the same local
+system.
 
 ## Run the Python report
 
@@ -202,7 +215,48 @@ Mp(0) -> O(1) -> Mp(2) -> O(5) -> Mp(8) -> O(15).
 Under the fixed convention, the last stage is `O(7,8)`.  The program never
 also calculates `O(8,7)`.
 
-## The counting rule is checked, not imposed
+## Strict Ma lift and the equal-row boundary rule
+
+The existence of a concrete path is decided before choosing a DRC.  Starting
+with the `Mp(0)` local system, the program applies
+
+```text
+lift_M_B -> selected character twist -> lift_B_M
+```
+
+at every stage, and applies the selected final `M -> B` lift.  A multi-DRC
+local-system packet therefore cannot delete a representation.
+
+To attach the final PBP, the program walks each raw final DRC backward through
+Ma's exact packet records, matching both the target DRC and target local
+system at every edge.  For
+
+\[
+ O^\vee=(2a_r,\ldots,2a_1),
+\]
+
+the concrete theta history gives subset bits `b_i`.  At a boundary where
+some `a_i` are equal, the endpoint invariant is
+
+\[
+ \bigl((a,m_a)\bigr)_a,
+ \qquad
+ m_a=\#\{i:a_i=a,\ b_i=1\}.
+\]
+
+Thus equal adjacent rows identify strict-row branches by permutation, while
+different selected multiplicities remain distinct.  The endpoint lookup uses
+the pair
+
+\[
+ (\text{final Ma local system},\ ((a,m_a))_a).
+\]
+
+This is what distinguishes two genuine PBPs sharing one local system in an
+even all-balanced tower, and what merges the seven singleton branches in the
+seven-row example.
+
+## Counting consequence and bounded audit
 
 Let `m_k` be the number of row-submultisets of `O^vee` whose rows sum to `2k`.
 The proposed rule is
@@ -214,12 +268,14 @@ The proposed rule is
  \end{cases}
 \]
 
-This rule is compared with the output only after the calculation.  It is not
-used to create paths or PBPs.  For the fixed `SO(n,n+1)` convention,
-the rule agrees in all `261/261` fine-K bins for the 66 all-even orbits through
-total orbit size `16`.  This is a bounded computational check, not a proof of
-the rule in arbitrary rank.  Every displayed number still comes solely from
-packet-certified concrete theta paths and deduplication of their raw Ma PBPs.
+The program does not multiply a count to create paths: every displayed path
+is still a concrete twist history propagated by Ma's lift.  The
+row-multiplicity profile above is used only to select its boundary PBP from
+the exact Ma ancestry.  For the fixed `SO(n,n+1)` convention, exhaustive tests
+give all concrete histories and the predicted number of PBPs in `261/261`
+fine-K bins for the 66 all-even orbits through total orbit size `16`, with no
+PBP/outer-extension collisions.  This is a bounded computational validation,
+not by itself a proof in arbitrary rank.
 
 ## Verification commands
 

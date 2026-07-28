@@ -322,10 +322,13 @@ def run_audit(max_total: int) -> None:
             outer_collisions.append((partition, *collision))
 
     elapsed = time.perf_counter() - start
+    assert chain_count == candidate_chain_count
+    assert not outer_collisions
+    assert not mismatch_profile
     print(
         "structural audit passed: "
         f"{partition_count} partitions, {bin_count} fine-K bins, "
-        f"{chain_count}/{candidate_chain_count} certified/candidate chains, "
+        f"{chain_count} strict Ma chains, "
         f"{parameter_count} distinct PBP parameters"
     )
     print(
@@ -335,7 +338,7 @@ def run_audit(max_total: int) -> None:
     )
     print(f"PBP/outer-parameter collisions: {len(outer_collisions)}")
     print(
-        "doubled row-submultiset heuristic: "
+        "row-multiplicity boundary formula: "
         f"{bin_count - len(mismatch_profile)}/{bin_count} bins agree"
     )
     for (partition, degree), (predicted, actual) in mismatch_profile.items():

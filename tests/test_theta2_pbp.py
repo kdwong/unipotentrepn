@@ -24,6 +24,7 @@ from theta2_pbp import (
     o_wedge_degrees_for_connected_type,
     print_report,
     resolve_final_form,
+    theta_subset_bits,
     validate_dual_orbit,
 )
 
@@ -154,6 +155,51 @@ def test_2x6_k1_has_twelve_concrete_paths_and_two_pbps() -> None:
     assert_orbit_membership(orbit, results, (6, 7))
 
 
+def test_2x7_balanced_boundary_keeps_every_strict_ma_path() -> None:
+    orbit = (2, 2, 2, 2, 2, 2, 2)
+    _, totals, chains, results = calculate(orbit)
+    assert totals == (3, 4, 7, 8, 11, 12, 15)
+    assert {
+        label: len(concrete_theta_paths(label_results))
+        for label, label_results in results.items()
+    } == {
+        "(000|0000)": 2,
+        "(100|0000)": 14,
+        "(110|0000)": 42,
+        "(111|0000)": 70,
+    }
+    assert all(
+        len(concrete_theta_paths(results[label]))
+        == candidate_concrete_path_count(label_chains)
+        for label, label_chains in chains.items()
+    )
+
+    k1_paths = concrete_theta_paths(results["(100|0000)"])
+    assert all(len(path.painted_bipartitions) == 1 for path in k1_paths)
+    fibers = {}
+    for path in k1_paths:
+        pbp = path.painted_bipartitions[0]
+        selected_count = sum(theta_subset_bits(orbit, path.chain, path.history))
+        fibers.setdefault((pbp.plain_drc, pbp.gamma, pbp.outer_det_twist), set()).add(
+            selected_count
+        )
+    assert fibers == {
+        ((('*', 'c', 'c'), ('*', 'd', 'd', 'd')), "B-", True): {1},
+        ((('*', '*', 'c'), ('*', '*', 'd', 'd')), "B-", True): {6},
+    }
+    assert [
+        sum(
+            1
+            for path in k1_paths
+            if path.painted_bipartitions[0].plain_drc == plain_drc
+        )
+        for plain_drc in (
+            (('*', 'c', 'c'), ('*', 'd', 'd', 'd')),
+            (('*', '*', 'c'), ('*', '*', 'd', 'd')),
+        )
+    ] == [7, 7]
+
+
 def test_6422_complements_are_computed_not_multiplied() -> None:
     orbit = (6, 4, 2, 2)
     _, totals, chains, results = calculate(orbit, final_form=(7, 8))
@@ -265,10 +311,9 @@ def test_cross_path_dedup_and_empty_bin() -> None:
     with contextlib.redirect_stdout(captured):
         print_report(orbit, totals, chains, results)
     report = captured.getvalue()
-    assert (
-        "packet-certified concrete theta paths of coarse connected-K type "
-        "(11|00): 2 (from 2 concrete VALUE candidates)"
-    ) in report
+    assert "concrete theta paths of coarse connected-K type (11|00): 2" in report
+    assert "VALUE candidate" not in report
+    assert "packet-certified" not in report
     assert "O(2,1) tt -> O(4,5) tt" in report
     assert "O(2,1) tt -> O(4,5) dt" in report
     assert_orbit_membership(orbit, results, (4, 5))
@@ -321,6 +366,7 @@ def main() -> None:
         test_orbit_4_so23_has_two_actual_pbps,
         test_single_row_trivial_family_matches_complete_ma_packets,
         test_2x6_k1_has_twelve_concrete_paths_and_two_pbps,
+        test_2x7_balanced_boundary_keeps_every_strict_ma_path,
         test_6422_complements_are_computed_not_multiplied,
         test_64222_raw_wp_shape_and_middle_degree,
         test_concrete_twists_and_lowest_harmonics_are_printed,

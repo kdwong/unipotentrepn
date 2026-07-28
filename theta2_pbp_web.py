@@ -4,7 +4,7 @@
 Run this file, then open the printed address in a browser.  The server uses
 only Python's standard library; all mathematical work is delegated to
 ``theta2_pbp.calculate`` so the command-line and browser interfaces share the
-same packet-certified concrete-path computation.
+same strict-Ma concrete-path computation.
 """
 
 from __future__ import annotations
@@ -63,11 +63,9 @@ from theta2_pbp import (  # noqa: E402 (the venv relaunch must happen first)
     ConcreteThetaPath,
     FineKChain,
     PaintedBipartition,
-    candidate_concrete_path_count,
     calculate,
     concrete_history_text,
     concrete_theta_paths,
-    enumerate_fine_k_chains,
     o_wedge_degrees_for_connected_type,
     orbit_pbp_shape,
     orbit_pbp_shapes,
@@ -251,7 +249,6 @@ def _serialize_uncached(
 
     final_form = resolve_final_form(sum(part) + 1)
     part, totals, _chains_by_label, results_by_label = calculate(part)
-    candidate_chains = enumerate_fine_k_chains(totals)
 
     n = sum(part) // 2
     empty_wp_p, empty_wp_q = orbit_pbp_shape(part)
@@ -283,9 +280,6 @@ def _serialize_uncached(
     labels = []
     for k, (label, results) in enumerate(results_by_label.items()):
         concrete_paths = concrete_theta_paths(results)
-        candidate_path_count = candidate_concrete_path_count(
-            candidate_chains[label]
-        )
         grouped: dict[
             tuple[Any, ...],
             list[tuple[int, ConcreteThetaPath, PaintedBipartition]],
@@ -338,7 +332,6 @@ def _serialize_uncached(
             {
                 "k": k,
                 "label": label,
-                "candidate_concrete_path_count": candidate_path_count,
                 "concrete_path_count": len(concrete_paths),
                 "distinct_pbp_count": len(groups),
                 "distinct_so_pbp_count": len(groups),

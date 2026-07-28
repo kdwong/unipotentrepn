@@ -12,7 +12,6 @@
  *   "results": [{
  *     "k": 4,
  *     "label": "(1111000|00000000)",
- *     "candidate_concrete_path_count": 8,
  *     "concrete_path_count": 8,
  *     "groups": [{
  *       "pbp": {
@@ -338,13 +337,6 @@
         ?? section.pathCount,
       uniquePathCount(groups),
     );
-    const candidateConcretePathCount = numberOr(
-      section.candidate_concrete_path_count
-        ?? section.candidateConcretePathCount
-        ?? section.candidate_count
-        ?? section.candidateCount,
-      concretePathCount,
-    );
     const distinctSoPbpCount = numberOr(
       section.distinct_so_pbp_count ?? section.distinctSoPbpCount ?? section.distinct_pbp_count,
       groups.length,
@@ -355,7 +347,6 @@
       k,
       label: label || constructLabel(k, finalForm),
       concretePathCount,
-      candidateConcretePathCount,
       distinctSoPbpCount,
       oWedgeDegrees,
       middleDegree: Boolean(section.middle_degree ?? section.middleDegree),
@@ -604,13 +595,6 @@
       strongText(section.concretePathCount),
       document.createTextNode(` concrete theta path${plural(section.concretePathCount)}`),
     );
-    if (section.candidateConcretePathCount !== section.concretePathCount) {
-      counts.append(
-        document.createTextNode(
-          ` from ${section.candidateConcretePathCount} concrete VALUE candidates`,
-        ),
-      );
-    }
     counts.title = `Exact label ${section.label}`;
     header.append(type, counts);
     article.append(header);
@@ -628,16 +612,6 @@
       );
     }
 
-    if (section.candidateConcretePathCount > section.concretePathCount) {
-      const omitted = section.candidateConcretePathCount - section.concretePathCount;
-      const note = element("p", "certification-note");
-      note.append(
-        strongText(`${omitted} ambiguous concrete VALUE candidate${plural(omitted)} omitted.`),
-        document.createTextNode(" Only packet-certified concrete theta paths are shown below."),
-      );
-      article.append(note);
-    }
-
     const groupedPathOccurrences = section.groups.reduce(
       (total, group) => total + group.paths.length,
       0,
@@ -653,7 +627,7 @@
     }
 
     if (!section.groups.length) {
-      article.append(element("div", "no-results", "No certified painted bipartitions were returned for this K-type."));
+      article.append(element("div", "no-results", "No painted bipartitions occur for this K-type."));
       return article;
     }
 

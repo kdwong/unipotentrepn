@@ -6,7 +6,7 @@ needs Python. The deployment therefore has two parts:
 1. `kdwong.github.io` serves the files in `web/`.
 2. A Python web service serves `POST /api/calculate`.
 
-The browser performs the same certified calculation as the local version; it
+The browser performs the same strict Ma calculation as the local version; it
 does not use a precomputed answer table.
 
 ## 1. Put this calculator in a repository you control

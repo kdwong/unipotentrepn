@@ -13,13 +13,15 @@ The program has two independent layers:
    separately, and only afterward groups them under the common connected
    highest-weight label ``(1^k|0)``.  These are two distinct degrees unless
    ``p=2k``.
-2. It expands those twist labels again, follows the repository's B/M local-
-   system and DRC theta lifts, and attaches the resulting final painted
-   bipartitions.  Exact DRC/packet edges are preferred; a cross-source local-
-   system coincidence is used only when it has a unique PBP target.  Ambiguous
-   ambiguous candidates are omitted.  Ma's raw final DRC is retained as
+2. It propagates every selected twist by Ma's B/M local-system lift.  Painted
+   bipartitions are then attached from the exact backward Ma ancestry of the
+   final DRC.  At a balanced pair this ancestry supplies the boundary
+   specialization that the direct DRC lift does not retain: histories are
+   grouped by their selected multiplicities inside each equal-row block, and
+   no representation is discarded merely because several DRCs carry the same
+   local system.  Ma's raw final DRC is retained as
    ``tau_wp in PBP(O^vee, wp)``.  The BMSZ bijection is used only to recover
-   and certify ``wp``; its auxiliary transport to the ``wp=empty`` shape is
+   and check ``wp``; its auxiliary transport to the ``wp=empty`` shape is
    never substituted for the actual tableau.
 
 The final real form is fixed throughout to ``O(n,n+1)``.  The retained paths
@@ -39,6 +41,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from fractions import Fraction
+from itertools import product
 from pathlib import Path
 from typing import Hashable, Iterable
 
@@ -110,6 +113,9 @@ MpWeight = tuple[Fraction, ...]
 Drc = tuple[tuple[str, ...], tuple[str, ...]]
 ValueList = tuple[int, ...]
 TwistHistory = tuple[str, ...]
+SubsetBits = tuple[int, ...]
+RowMultiplicityProfile = tuple[tuple[int, int], ...]
+MaEndpointKey = tuple[Hashable, RowMultiplicityProfile]
 
 CHAR_TWISTS = {
     "tt": (1, 1),
@@ -380,6 +386,18 @@ class PBPLadder:
 
     drc_stages: tuple[dict[Drc, Hashable], ...]
     ls_packet_stages: tuple[dict[Hashable, tuple], ...]
+
+
+@dataclass(frozen=True)
+class MaAncestryEdge:
+    """One exact edge in the backward Ma ancestry of a final DRC."""
+
+    stage_index: int
+    source_drc: Drc
+    source_local_system: Hashable
+    target_drc: Drc
+    target_local_system: Hashable
+    epsilon: int
 
 
 def validate_dual_orbit(partition: Iterable[int]) -> tuple[int, ...]:
@@ -915,18 +933,312 @@ def load_pbp_ladder(
     return PBPLadder(stages, packet_stages)
 
 
+def trace_ma_ancestry(
+    ladder: PBPLadder,
+    final_drc: Drc,
+) -> tuple[MaAncestryEdge, ...]:
+    """Trace one raw final DRC back to ``Mp(0)`` through exact packet edges.
+
+    Local systems need not identify a unique DRC at a balanced pair.  Ma's
+    packet records do identify the edge once both the target DRC and its local
+    system are fixed, so no list-order or singleton-packet heuristic is used.
+    """
+
+    try:
+        target_local_system = ladder.drc_stages[-1][final_drc]
+    except KeyError as error:
+        raise ValueError("the requested DRC is not in the final ladder stage") from error
+
+    target_drc = final_drc
+    reversed_edges: list[MaAncestryEdge] = []
+    for stage_index in range(len(ladder.drc_stages) - 1, 0, -1):
+        packet = ladder.ls_packet_stages[stage_index].get(target_local_system)
+        entries = () if packet is None else packet[1]
+        matches = [
+            entry
+            for entry in entries
+            if entry[0] == target_drc and entry[1] == target_local_system
+        ]
+        if len(matches) != 1:
+            raise RuntimeError(
+                "Ma ancestry is not unique for an exact target DRC/local-system "
+                f"pair at ladder stage {stage_index}: found {len(matches)} edges"
+            )
+
+        (
+            recorded_target_drc,
+            recorded_target_local_system,
+            source_drc,
+            epsilon,
+            source_local_system,
+        ) = matches[0][:5]
+        if epsilon not in (0, 1, False, True):
+            raise RuntimeError("Ma packet epsilon is not binary")
+        if (
+            ladder.drc_stages[stage_index - 1].get(source_drc)
+            != source_local_system
+        ):
+            raise RuntimeError(
+                f"Ma ancestry source is absent from ladder stage {stage_index - 1}"
+            )
+        reversed_edges.append(
+            MaAncestryEdge(
+                stage_index=stage_index,
+                source_drc=source_drc,
+                source_local_system=source_local_system,
+                target_drc=recorded_target_drc,
+                target_local_system=recorded_target_local_system,
+                epsilon=int(epsilon),
+            )
+        )
+        target_drc = source_drc
+        target_local_system = source_local_system
+
+    edges = tuple(reversed(reversed_edges))
+    if tuple(edge.stage_index for edge in edges) != tuple(
+        range(1, len(ladder.drc_stages))
+    ):
+        raise RuntimeError("Ma ancestry does not traverse every ladder stage")
+    return edges
+
+
+def _decode_raw_subset_bits(raw_bits: SubsetBits) -> SubsetBits:
+    """Apply the backward XOR decoder from raw theta choices to subset bits."""
+
+    row_count = len(raw_bits)
+    if not row_count or any(bit not in (0, 1) for bit in raw_bits):
+        raise ValueError("raw subset bits must be a nonempty binary tuple")
+
+    raw = (0, *raw_bits)  # one-based indexing for the formulas
+    subset = [0] * (row_count + 1)
+    epsilon = raw[row_count]
+    subset[row_count] = epsilon
+    lower_bound = 0 if row_count % 2 else 1
+    for index in range(row_count - 2, lower_bound, -2):
+        subset[index] = raw[index] ^ epsilon
+        subset[index + 1] = raw[index + 1] ^ epsilon
+        epsilon ^= raw[index] ^ raw[index + 1]
+    if row_count % 2 == 0:
+        subset[1] = raw[1] ^ epsilon
+    return tuple(subset[1:])
+
+
+def theta_subset_bits(
+    partition: Iterable[int],
+    chain: FineKChain,
+    history: TwistHistory,
+) -> SubsetBits:
+    """Decode a concrete VALUE history into its subset of orbit rows.
+
+    Rows are numbered from the bottom: for
+    ``O^vee=(2a_r,...,2a_1)``, the returned bit ``b_i`` records whether row
+    ``a_i`` is selected.  The decoder remains valid when some ``a_i`` agree;
+    in that case only the selected multiplicity in the equal-row block is an
+    invariant of the boundary representation.
+    """
+
+    part = validate_dual_orbit(partition)
+    row_count = len(part)
+    expected_history_length = len(chain.transitions) + 1
+    if len(history) != expected_history_length:
+        raise ValueError("history must select one twist at every orthogonal stage")
+    expected_orthogonal_stages = (
+        (row_count + 1) // 2 if row_count % 2 else row_count // 2 + 1
+    )
+    if expected_history_length != expected_orthogonal_stages:
+        raise ValueError("the chain length is incompatible with the orbit rows")
+
+    raw = [0] * (row_count + 1)
+    transition_index = 0
+    if row_count % 2 == 0:
+        first = chain.transitions[0]
+        if (first.p, first.q) == (0, 1):
+            raw[1] = 0
+        elif (first.p, first.q) == (1, 0):
+            raw[1] = 1
+        else:
+            raise ValueError("the even-row tower does not begin with O(0,1) or O(1,0)")
+        transition_index = 1
+        paired_indices = range(2, row_count - 1, 2)
+    else:
+        paired_indices = range(1, row_count - 1, 2)
+
+    paired_transitions = chain.transitions[transition_index:]
+    if len(paired_transitions) != len(tuple(paired_indices)):
+        raise ValueError("the paired theta stages do not match the orbit rows")
+    # Recreate the range after using it for the length check.
+    paired_indices = (
+        range(2, row_count - 1, 2)
+        if row_count % 2 == 0
+        else range(1, row_count - 1, 2)
+    )
+    for row_index, transition in zip(paired_indices, paired_transitions):
+        twist_label = history[transition_index]
+        if transition.p < transition.q:
+            pair = {"tt": (0, 0), "dt": (1, 0)}.get(twist_label)
+        elif transition.p > transition.q:
+            pair = {"td": (0, 1), "tt": (1, 1)}.get(twist_label)
+        else:
+            pair = None
+        if pair is None or abs(transition.p - transition.q) != 1:
+            raise ValueError(
+                "a paired theta stage has an incompatible signature/twist choice"
+            )
+        raw[row_index], raw[row_index + 1] = pair
+        transition_index += 1
+
+    try:
+        raw[row_count] = {"tt": 0, "dt": 1}[history[-1]]
+    except KeyError as error:
+        raise ValueError("the final twist must be tt or dt") from error
+
+    subset_bits = _decode_raw_subset_bits(tuple(raw[1:]))
+    half_rows = tuple(row // 2 for row in reversed(part))
+    weighted_degree = sum(
+        half_row * bit for half_row, bit in zip(half_rows, subset_bits)
+    )
+    if weighted_degree != chain.final_left_degree:
+        raise RuntimeError(
+            "the theta subset decoder disagrees with the exact final exterior degree"
+        )
+    return subset_bits
+
+
+def row_multiplicity_profile(
+    partition: Iterable[int],
+    subset_bits: SubsetBits,
+) -> RowMultiplicityProfile:
+    """Forget labels inside equal-row blocks but retain selected multiplicity."""
+
+    part = validate_dual_orbit(partition)
+    if len(subset_bits) != len(part) or any(bit not in (0, 1) for bit in subset_bits):
+        raise ValueError("subset bits must be binary with one entry per orbit row")
+    counts: dict[int, int] = {}
+    for row, bit in zip(reversed(part), subset_bits):
+        half_row = row // 2
+        counts[half_row] = counts.get(half_row, 0) + bit
+    return tuple(sorted(counts.items()))
+
+
+def strict_ma_final_local_system(
+    zero_local_system: Hashable,
+    chain: FineKChain,
+    history: TwistHistory,
+) -> Hashable:
+    """Propagate one concrete history by Ma's representation lift only."""
+
+    if len(history) != len(chain.transitions) + 1:
+        raise ValueError("history must select one twist at every orthogonal stage")
+    local_system = zero_local_system
+    for transition, twist_label in zip(chain.transitions, history):
+        if twist_label not in transition.twist_labels:
+            raise ValueError("history uses a twist unavailable in its VALUE chain")
+        base_local_system = lift_M_B(local_system, transition.p, transition.q)
+        if not base_local_system:
+            raise RuntimeError("Ma's M-to-B representation lift vanished")
+        input_local_system = char_twist_B(
+            base_local_system,
+            CHAR_TWISTS[twist_label],
+        )
+        local_system = lift_B_M(
+            input_local_system,
+            transition.mp_total // 2,
+        )
+        if not local_system:
+            raise RuntimeError("Ma's B-to-M representation lift vanished")
+
+    final_twist = history[-1]
+    if final_twist not in chain.final_twist_labels:
+        raise ValueError("history uses a final twist unavailable in its VALUE chain")
+    base_final_local_system = lift_M_B(
+        local_system,
+        chain.final_p,
+        chain.final_q,
+    )
+    if not base_final_local_system:
+        raise RuntimeError("Ma's final M-to-B representation lift vanished")
+    return char_twist_B(
+        base_final_local_system,
+        CHAR_TWISTS[final_twist],
+    )
+
+
+def _canonical_ma_subset_bits_from_edges(
+    part: tuple[int, ...],
+    edges: tuple[MaAncestryEdge, ...],
+) -> SubsetBits | None:
+    row_count = len(part)
+    expected_edge_count = row_count if row_count % 2 else row_count + 1
+    if len(edges) != expected_edge_count:
+        raise RuntimeError("Ma ancestry length is incompatible with the orbit rows")
+
+    raw = [0] * (row_count + 1)
+    first_paired_stage = 1
+    if row_count % 2 == 0:
+        first_form = gp_form_B_ext(edges[0].target_drc)
+        if first_form == (0, 1):
+            raw[1] = 0
+        elif first_form == (1, 0):
+            raw[1] = 1
+        else:
+            return None
+        first_paired_stage = 3
+        paired_indices = range(2, row_count - 1, 2)
+    else:
+        paired_indices = range(1, row_count - 1, 2)
+
+    pair_lookup = {
+        # (lower signature, B epsilon, following M epsilon): raw bit pair
+        (True, 0, 0): (0, 0),
+        (True, 1, 1): (1, 0),
+        (False, 1, 0): (0, 1),
+        (False, 0, 0): (1, 1),
+    }
+    b_stage_indices = range(first_paired_stage, len(edges), 2)
+    for row_index, stage_index in zip(paired_indices, b_stage_indices):
+        b_edge = edges[stage_index - 1]
+        m_edge = edges[stage_index]
+        p, q = gp_form_B_ext(b_edge.target_drc)
+        if abs(p - q) != 1:
+            return None
+        pair = pair_lookup.get((p < q, b_edge.epsilon, m_edge.epsilon))
+        if pair is None:
+            return None
+        raw[row_index], raw[row_index + 1] = pair
+
+    raw[row_count] = edges[-1].epsilon
+    return _decode_raw_subset_bits(tuple(raw[1:]))
+
+
+def canonical_ma_subset_bits(
+    partition: Iterable[int],
+    ladder: PBPLadder,
+    final_drc: Drc,
+) -> SubsetBits | None:
+    """Read the distinct-row boundary provenance encoded by one Ma ancestry.
+
+    ``None`` means that the final DRC ancestry is not one of the right-trivial
+    VALUE histories considered by this calculator.  Exact-ancestry failures
+    remain hard errors.
+    """
+
+    part = validate_dual_orbit(partition)
+    edges = trace_ma_ancestry(ladder, final_drc)
+    return _canonical_ma_subset_bits_from_edges(part, edges)
+
+
 def resolve_type_b_pbp(
     stage: dict[Drc, Hashable],
     target_local_system: Hashable,
     form: tuple[int, int],
     source_drc: Drc,
 ) -> tuple[tuple[Drc, bool], ...]:
-    """Resolve exact M-to-B edges, including the external determinant.
+    """Legacy diagnostic for exact M-to-B DRC edges.
 
     Form and local system alone can collide in a large packet.  Exact DRC
     descent is preferred.  A cross-source coincidence is accepted only when
-    form plus local system leaves one PBP/outer parameter; ambiguous packets
-    are never assigned heuristically.
+    form plus local system leaves one PBP/outer parameter.  This helper is not
+    used to decide whether a concrete representation path exists.
     """
 
     all_matches = []
@@ -952,9 +1264,7 @@ def resolve_type_b_pbp(
     exact = tuple(dict.fromkeys(source_matches))
     if exact:
         return exact
-    # A unique form+LS parameter is still decisive for a cross-signature
-    # realization.  Ambiguous packets are not guessed: that candidate chain is
-    # left uncertified and filtered from the report.
+    # This singleton fallback is useful only for comparing legacy DRC output.
     fallback = tuple(dict.fromkeys(all_matches))
     return fallback if len(fallback) == 1 else ()
 
@@ -966,7 +1276,7 @@ def resolve_type_m_lift(
     source_matches: tuple[tuple[Drc, bool], ...],
     added_column_length: int,
 ) -> tuple[Drc, ...]:
-    """Resolve exact B-to-M edges, allowing only a singleton LS fallback."""
+    """Legacy diagnostic for B-to-M DRC edges and singleton LS fallback."""
 
     exact_targets = {
         drc
@@ -1011,7 +1321,12 @@ def compute_chain_pbps(
     chain: FineKChain,
     ladder: PBPLadder,
 ) -> ChainPBPResult:
-    """Expand grouped twists and attach every final PBP to one fine-K path."""
+    """Run the former forward DRC traversal for low-level diagnostics.
+
+    The public calculation uses :func:`compute_strict_chain_pbps`; this older
+    routine must not be used as a gate at balanced pairs, where a valid Ma
+    representation lift can have several DRCs with the same local system.
+    """
 
     stages = ladder.drc_stages
     packet_stages = ladder.ls_packet_stages
@@ -1162,7 +1477,7 @@ def concrete_theta_paths(
 
 
 def candidate_concrete_path_count(chains: Iterable[FineKChain]) -> int:
-    """Count VALUE candidates after selecting every grouped twist option."""
+    """Count concrete histories after selecting every grouped twist option."""
 
     total = 0
     for chain in chains:
@@ -1200,6 +1515,65 @@ def orbit_pbp_shapes(
     }
 
 
+def attach_wp_label(
+    partition: tuple[int, ...],
+    raw_pbp: PaintedBipartition,
+    pbp_bijection: dict[Drc, tuple[Drc, frozenset[int]]],
+    expected_shapes: dict[
+        tuple[int, ...], tuple[tuple[int, ...], tuple[int, ...]]
+    ] | None = None,
+) -> PaintedBipartition:
+    """Attach and check the BMSZ primitive-pair label of one raw Ma PBP."""
+
+    shapes = orbit_pbp_shapes(partition) if expected_shapes is None else expected_shapes
+    raw_plain_drc = reg_drc(raw_pbp.plain_drc)
+    try:
+        special_plain_drc, wp = pbp_bijection[raw_plain_drc]
+    except KeyError as error:
+        raise RuntimeError(
+            "A final theta-lift DRC is absent from the orbit's BMSZ "
+            f"PBP bijection for O^vee={partition}: {raw_plain_drc!r}"
+        ) from error
+
+    wp_indices = tuple(sorted(wp))
+    expected_shape = shapes.get(wp_indices)
+    actual_shape = drc_shape(raw_plain_drc)
+    if expected_shape is None or actual_shape != expected_shape:
+        raise RuntimeError(
+            "Raw PBP shape is incompatible with its primitive-pair set: "
+            f"O^vee={partition}, wp={wp_indices}, "
+            f"expected={expected_shape}, actual={actual_shape}, "
+            f"raw={raw_plain_drc!r}"
+        )
+
+    try:
+        special_extended_drc = make_extdrc_B(
+            special_plain_drc,
+            raw_pbp.gamma,
+        )
+    except AssertionError as error:
+        raise RuntimeError(
+            "The auxiliary wp-empty reference is incompatible with its "
+            f"B+/B- tag for O^vee={partition}: "
+            f"drc={special_plain_drc!r}, gamma={raw_pbp.gamma}"
+        ) from error
+
+    if gp_form_B_ext(special_extended_drc) != gp_form_B_ext(
+        raw_pbp.extended_drc
+    ):
+        raise RuntimeError(
+            "Transport to the auxiliary wp-empty reference changed the "
+            f"final real form for O^vee={partition}"
+        )
+
+    return PaintedBipartition(
+        extended_drc=raw_pbp.extended_drc,
+        outer_det_twist=raw_pbp.outer_det_twist,
+        primitive_pair_indices=wp_indices,
+        special_reference_extended_drc=special_extended_drc,
+    )
+
+
 def attach_wp_labels(
     partition: tuple[int, ...],
     raw_result: ChainPBPResult,
@@ -1219,52 +1593,11 @@ def attach_wp_labels(
     histories_by_pbp: dict[PaintedBipartition, set[TwistHistory]] = {}
 
     for raw_pbp, histories in raw_result.histories_by_pbp.items():
-        raw_plain_drc = reg_drc(raw_pbp.plain_drc)
-        try:
-            special_plain_drc, wp = pbp_bijection[raw_plain_drc]
-        except KeyError as error:
-            raise RuntimeError(
-                "A final theta-lift DRC is absent from the orbit's BMSZ "
-                f"PBP bijection for O^vee={partition}: {raw_plain_drc!r}"
-            ) from error
-
-        wp_indices = tuple(sorted(wp))
-        expected_shape = expected_shapes.get(wp_indices)
-        actual_shape = drc_shape(raw_plain_drc)
-        if expected_shape is None or actual_shape != expected_shape:
-            raise RuntimeError(
-                "Raw PBP shape is incompatible with its primitive-pair set: "
-                f"O^vee={partition}, wp={wp_indices}, "
-                f"expected={expected_shape}, actual={actual_shape}, "
-                f"raw={raw_plain_drc!r}"
-            )
-
-        try:
-            special_extended_drc = make_extdrc_B(
-                special_plain_drc,
-                raw_pbp.gamma,
-            )
-        except AssertionError as error:
-            raise RuntimeError(
-                "The auxiliary wp-empty reference is incompatible with its "
-                f"B+/B- tag for O^vee={partition}: "
-                f"drc={special_plain_drc!r}, gamma={raw_pbp.gamma}"
-            ) from error
-
-        if gp_form_B_ext(special_extended_drc) != gp_form_B_ext(
-            raw_pbp.extended_drc
-        ):
-            raise RuntimeError(
-                "Transport to the auxiliary wp-empty reference changed the "
-                "final real form for "
-                f"O^vee={partition}"
-            )
-
-        pbp = PaintedBipartition(
-            extended_drc=raw_pbp.extended_drc,
-            outer_det_twist=raw_pbp.outer_det_twist,
-            primitive_pair_indices=wp_indices,
-            special_reference_extended_drc=special_extended_drc,
+        pbp = attach_wp_label(
+            partition,
+            raw_pbp,
+            pbp_bijection,
+            expected_shapes,
         )
         histories_by_pbp.setdefault(pbp, set()).update(histories)
 
@@ -1274,6 +1607,121 @@ def attach_wp_labels(
 # Backward-compatible name for callers of the earlier prototype.  The
 # operation no longer canonicalizes/replaces the displayed tableau.
 canonicalize_chain_pbps = attach_wp_labels
+
+
+def concrete_histories(chain: FineKChain) -> tuple[TwistHistory, ...]:
+    """Select one available twist at every orthogonal stage of a VALUE chain."""
+
+    choices = [transition.twist_labels for transition in chain.transitions]
+    choices.append(chain.final_twist_labels)
+    return tuple(tuple(history) for history in product(*choices))
+
+
+def build_ma_endpoint_map(
+    partition: tuple[int, ...],
+    ladder: PBPLadder,
+    pbp_bijection: dict[Drc, tuple[Drc, frozenset[int]]],
+    final_form: tuple[int, int],
+    required_keys: set[MaEndpointKey],
+) -> dict[MaEndpointKey, PaintedBipartition]:
+    """Match strict Ma representations to PBPs by boundary provenance.
+
+    The key consists of the final Ma local system and, for every distinct row
+    size, the number of selected copies.  The second component is exactly the
+    specialization invariant obtained by permuting equal rows.  It separates
+    the two genuine PBPs that can share one local system in an all-balanced
+    even tower, while identifying all strict-row branches that coalesce at the
+    boundary.
+    """
+
+    expected_shapes = orbit_pbp_shapes(partition)
+    endpoints: dict[MaEndpointKey, PaintedBipartition] = {}
+    final_stage = ladder.drc_stages[-1]
+    for final_drc, represented_local_system in final_stage.items():
+        if gp_form_B_ext(final_drc) != final_form:
+            continue
+        edges = trace_ma_ancestry(ladder, final_drc)
+        subset_bits = _canonical_ma_subset_bits_from_edges(partition, edges)
+        if subset_bits is None:
+            continue
+        profile = row_multiplicity_profile(partition, subset_bits)
+
+        # At the final B edge, Ma's epsilon records which O extension occurs.
+        # Intermediate packet epsilons have different roles and are used only
+        # by the pair table in _canonical_ma_subset_bits_from_edges.
+        outer_det_twist = bool(edges[-1].epsilon)
+        final_local_system = (
+            char_twist_B(represented_local_system, CHAR_TWISTS["dd"])
+            if outer_det_twist
+            else represented_local_system
+        )
+        final_base = lift_M_B(
+            edges[-1].source_local_system,
+            *final_form,
+        )
+        ancestry_final_local_system = char_twist_B(
+            final_base,
+            CHAR_TWISTS["dt" if edges[-1].epsilon else "tt"],
+        )
+        if ancestry_final_local_system != final_local_system:
+            raise RuntimeError(
+                "The final Ma ancestry epsilon disagrees with its O extension"
+            )
+        key = final_local_system, profile
+        if key not in required_keys:
+            continue
+        if not verify_drc(final_drc, "B"):
+            raise RuntimeError(f"Invalid final painted bipartition: {final_drc!r}")
+        pbp = attach_wp_label(
+            partition,
+            PaintedBipartition(final_drc, outer_det_twist),
+            pbp_bijection,
+            expected_shapes,
+        )
+        previous = endpoints.get(key)
+        if previous is not None and previous != pbp:
+            raise RuntimeError(
+                "Distinct PBPs have the same strict Ma local system and "
+                f"boundary row-multiplicity profile for O^vee={partition}"
+            )
+        endpoints[key] = pbp
+
+    missing = required_keys - endpoints.keys()
+    if missing:
+        raise RuntimeError(
+            "Some strict Ma representations have no boundary-provenance PBP "
+            f"endpoint for O^vee={partition}: {len(missing)} missing keys"
+        )
+    return endpoints
+
+
+def compute_strict_chain_pbps(
+    partition: tuple[int, ...],
+    chain: FineKChain,
+    zero_local_system: Hashable,
+    endpoints: dict[MaEndpointKey, PaintedBipartition],
+) -> ChainPBPResult:
+    """Attach every concrete Ma history of one VALUE chain to its endpoint."""
+
+    histories_by_pbp: dict[PaintedBipartition, set[TwistHistory]] = {}
+    for history in concrete_histories(chain):
+        final_local_system = strict_ma_final_local_system(
+            zero_local_system,
+            chain,
+            history,
+        )
+        subset_bits = theta_subset_bits(partition, chain, history)
+        profile = row_multiplicity_profile(partition, subset_bits)
+        key = final_local_system, profile
+        try:
+            pbp = endpoints[key]
+        except KeyError as error:
+            raise RuntimeError(
+                "A strict Ma theta path is missing its painted-bipartition "
+                f"endpoint for O^vee={partition}, history={history}"
+            ) from error
+        histories_by_pbp.setdefault(pbp, set()).add(history)
+    return ChainPBPResult(chain, histories_by_pbp)
 
 
 def concrete_history_text(
@@ -1325,21 +1773,13 @@ def print_report(
         print(f"  wp={pairs or 'empty'}: {shape}")
     print()
 
-    candidate_chains_by_label = enumerate_fine_k_chains(
-        chain_totals,
-        (final_p, final_q),
-    )
     for k, label in enumerate(chains_by_label):
         results = results_by_label[label]
         concrete_paths = concrete_theta_paths(results)
-        candidate_count = candidate_concrete_path_count(
-            candidate_chains_by_label[label]
-        )
         wedge_degrees = o_wedge_degrees_for_connected_type(final_p, k)
         print(
-            f"packet-certified concrete theta paths of coarse connected-K "
-            f"type {label}: {len(concrete_paths)} "
-            f"(from {candidate_count} concrete VALUE candidates)"
+            f"concrete theta paths of coarse connected-K type {label}: "
+            f"{len(concrete_paths)}"
         )
         print(f"  exact right-trivial O({final_p}) exterior degrees: {wedge_degrees}")
         for path_number, path in enumerate(concrete_paths, start=1):
@@ -1404,7 +1844,7 @@ def calculate(
     partition: Iterable[int],
     final_form: tuple[int, int] | None = None,
 ):
-    """Return packet-certified grouped chain results and their PBPs.
+    """Return every strict Ma concrete history and its painted bipartition.
 
     Use :func:`concrete_theta_paths` to obtain the user-facing selected-twist
     path enumeration from any label's grouped results.
@@ -1419,22 +1859,47 @@ def calculate(
     )
     ladder = load_pbp_ladder(part, totals)
     pbp_bijection, _ = build_pbp_bijection(part, "B")
+    _zero_drc, zero_local_system = next(iter(ladder.drc_stages[0].items()))
+
+    required_endpoint_keys: set[MaEndpointKey] = set()
+    for candidate_chains in candidate_chains_by_label.values():
+        for chain in candidate_chains:
+            for history in concrete_histories(chain):
+                required_endpoint_keys.add(
+                    (
+                        strict_ma_final_local_system(
+                            zero_local_system,
+                            chain,
+                            history,
+                        ),
+                        row_multiplicity_profile(
+                            part,
+                            theta_subset_bits(part, chain, history),
+                        ),
+                    )
+                )
+    endpoints = build_ma_endpoint_map(
+        part,
+        ladder,
+        pbp_bijection,
+        resolved_final_form,
+        required_endpoint_keys,
+    )
+
     results_by_label = {}
     chains_by_label = {}
     for label, candidate_chains in candidate_chains_by_label.items():
         results = tuple(
-            result
+            compute_strict_chain_pbps(
+                part,
+                chain,
+                zero_local_system,
+                endpoints,
+            )
             for chain in candidate_chains
-            if (
-                result := attach_wp_labels(
-                    part,
-                    compute_chain_pbps(chain, ladder),
-                    pbp_bijection,
-                )
-            ).histories_by_pbp
         )
         results_by_label[label] = results
-        chains_by_label[label] = tuple(result.chain for result in results)
+        chains_by_label[label] = candidate_chains
     return part, totals, chains_by_label, results_by_label
 
 
