@@ -524,7 +524,13 @@
 
   function renderResults(data) {
     const orbitText = `(${data.orbit.join(", ")})`;
-    resultsTitle.textContent = `O∨ = ${orbitText}`;
+    const dualMark = document.createElement("sup");
+    dualMark.textContent = "∨";
+    resultsTitle.replaceChildren(
+      document.createTextNode("O"),
+      dualMark,
+      document.createTextNode(` = ${orbitText}`),
+    );
     const shapeNote = data.allowedBipartitionShapes.length === 1
       ? ` · ℘ = ∅ shape P = (${data.allowedBipartitionShapes[0].p.join(", ")}), Q = (${data.allowedBipartitionShapes[0].q.join(", ")})`
       : ` · ${data.allowedBipartitionShapes.length} legitimate ℘-dependent PBP shapes`;
