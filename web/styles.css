@@ -820,10 +820,6 @@ h1 em {
 
 .invariants-shell {
   padding: 28px 24px 24px;
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
-  align-items: stretch;
-  gap: 18px;
 }
 
 .painted-bipartition-panel {
@@ -980,7 +976,8 @@ h1 em {
 
 .associated-cycle-panel {
   min-width: 0;
-  padding: 18px;
+  margin-top: 24px;
+  padding: 20px;
   background: linear-gradient(145deg, #eef5f2, #f8f4ec 72%);
   border: 1px solid #c8d7d2;
   border-radius: 9px;
@@ -1024,6 +1021,7 @@ h1 em {
 
 .associated-cycle-terms {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
   gap: 9px;
 }
 
@@ -1066,17 +1064,69 @@ h1 em {
 
 .marked-diagram {
   margin: 10px 0 0;
-  padding: 10px 12px;
+  padding: 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   overflow-x: auto;
-  color: var(--ink);
   background: #fffdf8;
   border: 1px solid var(--line);
   border-radius: 5px;
-  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  scrollbar-width: thin;
+}
+
+.marked-diagram-row {
+  display: flex;
+  flex: 0 0 auto;
+}
+
+.marked-diagram-row + .marked-diagram-row {
+  margin-top: -1px;
+}
+
+.marked-diagram-cell {
+  width: 31px;
+  height: 31px;
+  flex: 0 0 31px;
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+  background: #fffdf8;
+  border: 1px solid #9e978b;
+  font-family: var(--serif);
   font-size: 17px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  line-height: 1.35;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.marked-diagram-cell + .marked-diagram-cell {
+  margin-left: -1px;
+}
+
+.marked-diagram-cell.cycle-marker-plus {
+  color: #1f5d4d;
+  background: var(--teal-light);
+}
+
+.marked-diagram-cell.cycle-marker-minus {
+  color: #244b67;
+  background: var(--blue-light);
+}
+
+.marked-diagram-cell.cycle-marker-star {
+  color: #68475f;
+  background: var(--plum-light);
+}
+
+.marked-diagram-cell.cycle-marker-equal {
+  color: #8b3827;
+  background: var(--cinnabar-light);
+}
+
+.marked-diagram-empty {
+  color: var(--ink-faint);
+  font-family: var(--serif);
+  font-style: italic;
 }
 
 .cycle-legend {
@@ -1451,14 +1501,6 @@ h1 em {
   .results-header {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .invariants-shell {
-    grid-template-columns: 1fr;
-  }
-
-  .associated-cycle-terms {
-    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
   }
 
   .tableaux-shell {

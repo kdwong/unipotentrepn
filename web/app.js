@@ -755,11 +755,7 @@
         );
       }
 
-      const diagram = element(
-        "pre",
-        "marked-diagram",
-        term.markedRows.length ? term.markedRows.join("\n") : "(trivial)",
-      );
+      const diagram = element("div", "marked-diagram");
       diagram.setAttribute("role", "img");
       diagram.setAttribute(
         "aria-label",
@@ -767,9 +763,41 @@
           ? `Marked Young diagram with rows ${term.markedRows.join("; ")}.`
           : "Trivial marked Young diagram.",
       );
+      if (!term.markedRows.length) {
+        diagram.append(element("span", "marked-diagram-empty", "(trivial)"));
+      }
+      term.markedRows.forEach((row, rowIndex) => {
+        const rowElement = element("div", "marked-diagram-row");
+        [...row].forEach((marker, columnIndex) => {
+          const cell = element(
+            "span",
+            `marked-diagram-cell cycle-marker-${markedDiagramMarkerClass(marker)}`,
+            marker,
+          );
+          cell.setAttribute("aria-hidden", "true");
+          cell.title = `row ${rowIndex + 1}, column ${columnIndex + 1}: ${markedDiagramMarkerLabel(marker)}`;
+          rowElement.append(cell);
+        });
+        diagram.append(rowElement);
+      });
       card.append(diagram);
       terms.append(card);
     });
+  }
+
+  function markedDiagramMarkerClass(marker) {
+    const classes = { "+": "plus", "-": "minus", "*": "star", "=": "equal" };
+    return classes[marker] || "other";
+  }
+
+  function markedDiagramMarkerLabel(marker) {
+    const labels = {
+      "+": "trivial local system on a plus sign",
+      "-": "trivial local system on a minus sign",
+      "*": "nontrivial local system on a plus sign",
+      "=": "nontrivial local system on a minus sign",
+    };
+    return labels[marker] || marker;
   }
 
   function renderTableau(container, columns, name) {

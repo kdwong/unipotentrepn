@@ -345,7 +345,17 @@ def test_http_api() -> None:
         assert "Path subsets index the rows of the dual orbit from bottom to top." in javascript
         assert "renderAssociatedCycle" in javascript
         assert "path.subsetLabel" in javascript
+        assert 'element("div", "marked-diagram")' in javascript
+        assert "marked-diagram-cell" in javascript
         assert 'makeStat(totalPaths, "concrete theta paths")' in javascript
+
+        connection.request("GET", "/styles.css")
+        response = connection.getresponse()
+        stylesheet = response.read().decode("utf-8")
+        assert response.status == 200
+        assert ".marked-diagram-cell {" in stylesheet
+        assert ".marked-diagram-row + .marked-diagram-row" in stylesheet
+        assert "grid-template-columns: minmax(0, 1.35fr)" not in stylesheet
         connection.close()
     finally:
         server.shutdown()
