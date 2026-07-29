@@ -70,8 +70,10 @@ from theta2_pbp import (  # noqa: E402 (the venv relaunch must happen first)
     orbit_pbp_shape,
     orbit_pbp_shapes,
     resolve_final_form,
+    theta_subset_bits,
     validate_dual_orbit,
 )
+from standalone import compute_AC, str_ils  # noqa: E402
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -196,6 +198,8 @@ def _serialize_pbp(pbp: PaintedBipartition) -> dict[str, Any]:
 
 
 def _pbp_sort_key(pbp: PaintedBipartition) -> tuple[Any, ...]:
+    """Return the deterministic display order for painted bipartitions."""
+
     return (
         pbp.extended_drc,
         pbp.primitive_pair_indices,
@@ -203,13 +207,83 @@ def _pbp_sort_key(pbp: PaintedBipartition) -> tuple[Any, ...]:
     )
 
 
+def _subset_label(indices: tuple[int, ...]) -> str:
+    """Format a subset of orbit-row indices with mathematical braces."""
+
+    return "{" + ", ".join(map(str, indices)) + "}"
+
+
+def _serialize_associated_cycle(
+    pbp: PaintedBipartition,
+    cache: dict[Any, Any],
+) -> dict[str, Any]:
+    """Serialize the associated-cycle terms as marked Young diagrams.
+
+    The associated-cycle descent is defined on the special reference DRC.
+    ``extended_drc`` is the shifted diagram displayed by the painted-
+    bipartition panel and is not a valid substitute in this calculation.
+    """
+
+    reference_drc = pbp.special_reference_extended_drc or pbp.extended_drc
+    primitive_pair_indices = frozenset(pbp.primitive_pair_indices)
+    raw_terms = compute_AC(
+        reference_drc,
+        primitive_pair_indices,
+        pbp.gamma,
+        cache=cache,
+    )
+
+    # Iterated theta lifting can reach the same marked diagram through more
+    # than one source term.  Combining those coefficients produces the actual
+    # associated-cycle multiplicity while preserving first-occurrence order.
+    coefficients: dict[tuple[tuple[int, int], ...], int] = {}
+    for coefficient, ils in raw_terms:
+        coefficients[ils] = coefficients.get(ils, 0) + int(coefficient)
+
+    terms = []
+    for ils, coefficient in coefficients.items():
+        rendered = str_ils(ils)
+        marked_rows = [] if rendered == "(trivial)" else rendered.splitlines()
+        entries = [
+            {"row_length": row_length, "p": p_value, "q": q_value}
+            for row_length, (p_value, q_value) in enumerate(ils, start=1)
+            if (p_value, q_value) != (0, 0)
+        ]
+        terms.append(
+            {
+                "coefficient": coefficient,
+                "marked_rows": marked_rows,
+                "underlying_partition": sorted(
+                    (len(row) for row in marked_rows),
+                    reverse=True,
+                ),
+                "ils_entries": entries,
+            }
+        )
+
+    return {
+        "term_count": len(terms),
+        "total_multiplicity": sum(term["coefficient"] for term in terms),
+        "terms": terms,
+    }
+
+
 def _serialize_group_path(
+    part: tuple[int, ...],
     path: ConcreteThetaPath,
     path_number: int,
     k: int,
     pbp: PaintedBipartition,
 ) -> dict[str, Any]:
+    """Serialize one concrete path with its orbit-row subset parameter."""
+
     history = path.history
+    subset_bits = theta_subset_bits(part, path.chain, history)
+    subset_indices = tuple(
+        index for index, bit in enumerate(subset_bits, start=1) if bit
+    )
+    subset_label = _subset_label(subset_indices)
+    subset_slug = "-".join(map(str, subset_indices)) or "empty"
     concrete_realizations = [
         {
             "twist_history": list(history),
@@ -220,9 +294,12 @@ def _serialize_group_path(
     preview_steps = concrete_realizations[0]["steps"]
     serialized = {
         "id": path_number,
-        "stable_id": f"k{k}-path-{path_number}",
-        "name": f"Path {path_number}",
+        "stable_id": f"k{k}-path-subset-{subset_slug}",
+        "name": f"Path {subset_label}",
         "number": path_number,
+        "subset_bits": list(subset_bits),
+        "subset_indices": list(subset_indices),
+        "subset_label": subset_label,
         "target_label": path.chain.final_exact_label,
         "left_degree": path.chain.final_left_degree,
         "text": " -> ".join(preview_steps),
@@ -249,6 +326,7 @@ def _serialize_uncached(
 
     final_form = resolve_final_form(sum(part) + 1)
     part, totals, _chains_by_label, results_by_label = calculate(part)
+    associated_cycle_cache: dict[Any, Any] = {}
 
     n = sum(part) // 2
     empty_wp_p, empty_wp_q = orbit_pbp_shape(part)
@@ -304,7 +382,7 @@ def _serialize_uncached(
             )
             pbp = occurrences[0][2]
             paths = [
-                _serialize_group_path(path, path_number, k, parameter)
+                _serialize_group_path(part, path, path_number, k, parameter)
                 for path_number, path, parameter in occurrences
             ]
             reached_extensions = sorted(
@@ -315,6 +393,10 @@ def _serialize_uncached(
                     "id": f"k{k}-pbp-{group_number}",
                     "number": group_number,
                     "pbp": _serialize_pbp(pbp),
+                    "associated_cycle": _serialize_associated_cycle(
+                        pbp,
+                        associated_cycle_cache,
+                    ),
                     "path_count": len({path_number for path_number, _, _ in occurrences}),
                     "path_occurrence_count": len(paths),
                     "outer_epsilons_reached": reached_extensions,

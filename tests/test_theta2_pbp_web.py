@@ -89,6 +89,64 @@ def test_explicit_paths_grouping_fixed_form_and_cache() -> None:
         for group in k1["groups"]
         for path in group["paths"]
     )
+    repeated_paths = [
+        path
+        for group in k1["groups"]
+        for path in group["paths"]
+    ]
+    assert {
+        tuple(path["subset_indices"])
+        for path in repeated_paths
+    } == {
+        (1,),
+        (2,),
+        (3,),
+        (4,),
+        (5,),
+        (6,),
+        (1, 2, 3, 4, 5),
+        (1, 2, 3, 4, 6),
+        (1, 2, 3, 5, 6),
+        (1, 2, 4, 5, 6),
+        (1, 3, 4, 5, 6),
+        (2, 3, 4, 5, 6),
+    }
+    assert all(
+        path["name"] == f'Path {path["subset_label"]}'
+        for path in repeated_paths
+    )
+
+    branched_cycle_group = next(
+        group
+        for group in repeated["results"][0]["groups"]
+        if group["pbp"]["gamma"] == "B-"
+    )
+    assert branched_cycle_group["associated_cycle"] == {
+        "term_count": 2,
+        "total_multiplicity": 2,
+        "terms": [
+            {
+                "coefficient": 1,
+                "marked_rows": ["-+-+-+-", "=*=*=", "+"],
+                "underlying_partition": [7, 5, 1],
+                "ils_entries": [
+                    {"row_length": 1, "p": 1, "q": 0},
+                    {"row_length": 5, "p": 0, "q": -1},
+                    {"row_length": 7, "p": 0, "q": 1},
+                ],
+            },
+            {
+                "coefficient": 1,
+                "marked_rows": ["-+-+-+-", "*=*=*", "-"],
+                "underlying_partition": [7, 5, 1],
+                "ils_entries": [
+                    {"row_length": 1, "p": 0, "q": 1},
+                    {"row_length": 5, "p": -1, "q": 0},
+                    {"row_length": 7, "p": 0, "q": 1},
+                ],
+            },
+        ],
+    }
 
     all_balanced = serialize_calculation((2, 2, 2, 2, 2, 2, 2))
     assert [
@@ -268,6 +326,9 @@ def test_http_api() -> None:
         assert response.status == 200
         assert 'name="final-orientation"' not in html
         assert "SO(n,n+1)" in html
+        assert "painted bipartition and associated cycle" in html
+        assert 'class="associated-cycle-panel"' in html
+        assert "nontrivial on +" in html
         assert "Jia-Jun Ma" in html
         assert "ems.press/journals/jems/articles/14298688" in html
         assert "doi.org/10.1090/jams/1082" in html
@@ -281,6 +342,9 @@ def test_http_api() -> None:
         assert 'body: JSON.stringify({ orbit })' in javascript
         assert "final-orientation" not in javascript
         assert "pathHistoryPreview(path.realizations)" in javascript
+        assert "Path subsets index the rows of the dual orbit from bottom to top." in javascript
+        assert "renderAssociatedCycle" in javascript
+        assert "path.subsetLabel" in javascript
         assert 'makeStat(totalPaths, "concrete theta paths")' in javascript
         connection.close()
     finally:

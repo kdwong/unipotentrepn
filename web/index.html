@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="Explore fine lowest K-type theta-lift paths and their painted bipartitions."
+      content="Explore fine lowest K-type theta-lift paths, painted bipartitions, and associated cycles."
     />
     <!--
       Leave this empty for the local Python server. For GitHub Pages, set it to
@@ -14,7 +14,7 @@
     -->
     <meta name="theta-api-url" content="" />
     <meta name="theme-color" content="#f4efe4" />
-    <title>Theta Atlas · Painted Bipartitions</title>
+    <title>Theta Atlas · Painted Bipartitions and Associated Cycles</title>
     <link rel="stylesheet" href="styles.css" />
     <script src="app.js" defer></script>
   </head>
@@ -22,8 +22,8 @@
     <a class="skip-link" href="#main-content">Skip to calculator</a>
 
     <header class="site-header">
-      <a class="brand" href="#" aria-label="Lowest harmonic chains and painted bipartitions home">
-        <span class="brand-name">Lowest harmonic chains and painted bipartitions</span>
+      <a class="brand" href="#" aria-label="Lowest harmonic chains, painted bipartitions, and associated cycles home">
+        <span class="brand-name">Lowest harmonic chains, painted bipartitions, and associated cycles</span>
       </a>
       <span class="local-badge"><span aria-hidden="true"></span><span class="runtime-label">Local computation</span></span>
     </header>
@@ -36,7 +36,7 @@
             theta lift chains that gives a special unipotent representation of
             <span class="math">G</span> with lowest harmonics equal to a fine
             <span class="math">K</span>-type. For each chain, the program also
-            computes its corresponding painted bipartition.
+            computes its corresponding painted bipartition and associated cycle.
           </p>
 
           <section class="sources sources-inline" aria-labelledby="sources-title">
@@ -167,31 +167,52 @@
           <div class="pbp-tags"></div>
         </header>
 
-        <div class="tableaux-shell">
-          <div class="diagram-panel">
-            <div class="diagram-heading">
-              <span class="diagram-letter">P</span>
-              <span>Left diagram</span>
+        <div class="invariants-shell">
+          <div class="painted-bipartition-panel">
+            <div class="tableaux-shell">
+              <div class="diagram-panel">
+                <div class="diagram-heading">
+                  <span class="diagram-letter">P</span>
+                  <span>Left diagram</span>
+                </div>
+                <div class="tableau tableau-p"></div>
+              </div>
+              <div class="diagram-divider" aria-hidden="true"><span>×</span></div>
+              <div class="diagram-panel">
+                <div class="diagram-heading">
+                  <span class="diagram-letter">Q</span>
+                  <span>Right diagram</span>
+                </div>
+                <div class="tableau tableau-q"></div>
+              </div>
             </div>
-            <div class="tableau tableau-p"></div>
-          </div>
-          <div class="diagram-divider" aria-hidden="true"><span>×</span></div>
-          <div class="diagram-panel">
-            <div class="diagram-heading">
-              <span class="diagram-letter">Q</span>
-              <span>Right diagram</span>
-            </div>
-            <div class="tableau tableau-q"></div>
-          </div>
-        </div>
 
-        <div class="marker-legend" aria-label="Tableau marker legend">
-          <span>markers</span>
-          <code title="* — dot / complex marker">•</code>
-          <code title="c — compact marker">c</code>
-          <code title="d — discrete marker">d</code>
-          <code title="s — s-paint">s</code>
-          <code title="r — r-paint">r</code>
+            <div class="marker-legend" aria-label="Tableau marker legend">
+              <span>markers</span>
+              <code title="* — dot / complex marker">•</code>
+              <code title="c — compact marker">c</code>
+              <code title="d — discrete marker">d</code>
+              <code title="s — s-paint">s</code>
+              <code title="r — r-paint">r</code>
+            </div>
+          </div>
+
+          <section class="associated-cycle-panel" aria-label="Associated cycle">
+            <header class="associated-cycle-heading">
+              <div>
+                <span class="cycle-kicker">Associated cycle</span>
+                <h5>Marked diagrams</h5>
+              </div>
+              <span class="cycle-count"></span>
+            </header>
+            <div class="associated-cycle-terms"></div>
+            <div class="cycle-legend" aria-label="Marked diagram legend">
+              <span><code>+</code> trivial on +</span>
+              <span><code>−</code> trivial on −</span>
+              <span><code>*</code> nontrivial on +</span>
+              <span><code>=</code> nontrivial on −</span>
+            </div>
+          </section>
         </div>
 
         <div class="paths-block">

@@ -356,6 +356,9 @@
 
   function normalizeGroup(group, index) {
     const pbp = normalizePbp(group.pbp || group.painted_bipartition || group.paintedBipartition || group);
+    const associatedCycle = normalizeAssociatedCycle(
+      group.associated_cycle || group.associatedCycle || {},
+    );
     const pathsSource = group.paths || group.chains || [];
     const paths = Array.isArray(pathsSource)
       ? pathsSource.map((path, pathIndex) => normalizePath(path, pathIndex))
@@ -367,6 +370,7 @@
     return {
       id: group.id || group.key || `pbp-${index + 1}`,
       pbp,
+      associatedCycle,
       paths,
       outerEpsilons,
     };
@@ -400,6 +404,29 @@
     };
   }
 
+  function normalizeAssociatedCycle(value) {
+    const termsSource = Array.isArray(value.terms) ? value.terms : [];
+    const terms = termsSource.map((term) => ({
+      coefficient: numberOr(term.coefficient ?? term.multiplicity, 1),
+      markedRows: stringArray(term.marked_rows || term.markedRows || []),
+      underlyingPartition: toNumberArray(
+        term.underlying_partition || term.underlyingPartition || [],
+      ),
+    }));
+    return {
+      termCount: numberOr(value.term_count ?? value.termCount, terms.length),
+      totalMultiplicity: numberOr(
+        value.total_multiplicity ?? value.totalMultiplicity,
+        terms.reduce((total, term) => total + term.coefficient, 0),
+      ),
+      terms,
+    };
+  }
+
+  function subsetLabel(indices) {
+    return `{${indices.join(", ")}}`;
+  }
+
   function normalizePath(value, index) {
     if (typeof value === "string") {
       const steps = splitChain(value);
@@ -424,11 +451,21 @@
     const realizations = normalizeRealizations(realizationSource, histories, steps);
     const number = numberOr(value.number ?? value.path_number ?? value.pathNumber, index + 1);
     const id = value.id ?? number;
+    const subsetIndices = toNumberArray(
+      value.subset_indices || value.subsetIndices || [],
+    );
+    const pathSubsetLabel = String(
+      value.subset_label
+        ?? value.subsetLabel
+        ?? (subsetIndices.length ? subsetLabel(subsetIndices) : ""),
+    );
 
     return {
       id,
       number,
-      name: value.name || value.title || `Path ${number}`,
+      name: value.name || value.title || `Path ${pathSubsetLabel || number}`,
+      subsetIndices,
+      subsetLabel: pathSubsetLabel,
       targetLabel: String(
         value.target_label
           ?? value.targetLabel
@@ -612,6 +649,14 @@
       );
     }
 
+    article.append(
+      element(
+        "p",
+        "multi-pbp-note",
+        "Path subsets index the rows of the dual orbit from bottom to top.",
+      ),
+    );
+
     const groupedPathOccurrences = section.groups.reduce(
       (total, group) => total + group.paths.length,
       0,
@@ -621,7 +666,7 @@
         element(
           "p",
           "multi-pbp-note",
-          "A concrete theta path can reach more than one painted bipartition. Its original path number is repeated in every group it reaches.",
+          "A concrete theta path can reach more than one painted bipartition. Its row-subset label is repeated in every group it reaches.",
         ),
       );
     }
@@ -654,6 +699,10 @@
 
     renderTableau(fragment.querySelector(".tableau-p"), group.pbp.p, "P");
     renderTableau(fragment.querySelector(".tableau-q"), group.pbp.q, "Q");
+    renderAssociatedCycle(
+      fragment.querySelector(".associated-cycle-panel"),
+      group.associatedCycle,
+    );
 
     fragment.querySelector(".paths-heading h5").textContent =
       `${group.paths.length} concrete theta path${plural(group.paths.length)}`;
@@ -675,6 +724,52 @@
 
     card.dataset.pbp = group.id;
     return fragment;
+  }
+
+  function renderAssociatedCycle(container, cycle) {
+    const count = cycle.termCount;
+    container.querySelector(".cycle-count").textContent =
+      `${count} component${plural(count)}`;
+    const terms = container.querySelector(".associated-cycle-terms");
+    if (!cycle.terms.length) {
+      terms.append(element("p", "cycle-empty", "No associated-cycle terms returned."));
+      return;
+    }
+
+    cycle.terms.forEach((term, index) => {
+      const card = element("article", "cycle-term");
+      const header = element("div", "cycle-term-header");
+      header.append(
+        element("span", "cycle-term-number", `Component ${index + 1}`),
+        element("span", "cycle-coefficient", `coefficient ${term.coefficient}`),
+      );
+      card.append(header);
+
+      if (term.underlyingPartition.length) {
+        card.append(
+          element(
+            "span",
+            "cycle-partition",
+            `underlying partition (${term.underlyingPartition.join(", ")})`,
+          ),
+        );
+      }
+
+      const diagram = element(
+        "pre",
+        "marked-diagram",
+        term.markedRows.length ? term.markedRows.join("\n") : "(trivial)",
+      );
+      diagram.setAttribute("role", "img");
+      diagram.setAttribute(
+        "aria-label",
+        term.markedRows.length
+          ? `Marked Young diagram with rows ${term.markedRows.join("; ")}.`
+          : "Trivial marked Young diagram.",
+      );
+      card.append(diagram);
+      terms.append(card);
+    });
   }
 
   function renderTableau(container, columns, name) {
@@ -719,7 +814,7 @@
 
     const summary = document.createElement("summary");
     summary.append(
-      element("span", "path-index", String(path.number ?? index + 1).padStart(2, "0")),
+      element("span", "path-index", path.subsetLabel || String(path.number ?? index + 1)),
     );
     const summaryMain = element("span", "path-summary-main");
     if (path.targetLabel) {
