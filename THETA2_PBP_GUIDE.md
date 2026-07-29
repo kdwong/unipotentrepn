@@ -277,6 +277,21 @@ fine-K bins for the 66 all-even orbits through total orbit size `16`, with no
 PBP/outer-extension collisions.  This is a bounded computational validation,
 not by itself a proof in arbitrary rank.
 
+The associated-cycle implementation has a second, independent bounded audit.
+For each concrete theta history, it replays Ma's representation lift along the
+path.  It then compares that result with the separate recursive associated-cycle
+descent from the reached painted bipartition.  When a path reaches the
+determinant-twisted `O(p,q)` extension, the audit first removes that outer
+determinant, since both extensions restrict to the same `SO(p,q)` parameter.
+Through total orbit size `16`, all `1392` path/PBP occurrences agree.  In
+particular, `177` painted-bipartition groups are reached by several paths, and
+all `1136` occurrences in those groups give the same associated cycle.
+An extended run through total size `20` also has no counterexample: `6144/6144`
+path/PBP occurrences agree across `138` dual orbits and `1214` SO
+painted-bipartition groups; `572` multi-path groups account for `5502` of those
+occurrences.  These finite checks are strong evidence, not a proof in all
+ranks.
+
 ## Verification commands
 
 Focused examples, the complete one-row calibration, and raw `wp` shapes:
@@ -303,6 +318,13 @@ for all 66 all-even orbits through total size `16`:
 
 ```powershell
 .\.venv\Scripts\python.exe tests\test_theta2_pbp_exhaustive.py --max-total 16
+```
+
+Independent comparison of path-by-path theta lifting with painted-bipartition
+associated-cycle descent:
+
+```powershell
+.\.venv\Scripts\python.exe tests\test_theta2_associated_cycle_path_independence.py --max-total 16
 ```
 
 Large regression for `O^vee=(8,6,4,4,2,2,2,2)`:
