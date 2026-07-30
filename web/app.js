@@ -132,6 +132,12 @@
         throw new Error(reason);
       }
 
+      if (group === "mp" && payload?.group !== "mp") {
+        throw new Error(
+          "The online Mp calculator service is still updating. Please try again shortly.",
+        );
+      }
+
       const result = normalizeResponse(payload, orbit, group);
       renderResults(result);
       setLoading(false);

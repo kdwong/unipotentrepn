@@ -494,6 +494,8 @@ def test_http_api() -> None:
         javascript = response.read().decode("utf-8")
         assert response.status == 200
         assert 'body: JSON.stringify({ group, orbit })' in javascript
+        assert 'group === "mp" && payload?.group !== "mp"' in javascript
+        assert "The online Mp calculator service is still updating." in javascript
         assert 'input[name="group"]' in javascript
         assert "handleGroupChange" in javascript
         assert 'groupKind === "mp"' in javascript
