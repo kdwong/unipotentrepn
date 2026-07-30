@@ -1,0 +1,59 @@
+name: Theta Atlas checks
+
+on:
+  push:
+    branches:
+      - main
+      - codex/theta-atlas-online
+    paths:
+      - '.github/workflows/theta-atlas.yml'
+      - 'mp2_pbp.py'
+      - 'theta2_pbp.py'
+      - 'theta2_pbp_web.py'
+      - 'requirements.txt'
+      - 'requirements-local.txt'
+      - 'tests/test_mp2_pbp.py'
+      - 'tests/test_theta2_pbp.py'
+      - 'tests/test_theta2_pbp_web.py'
+      - 'web/**'
+  pull_request:
+    paths:
+      - '.github/workflows/theta-atlas.yml'
+      - 'mp2_pbp.py'
+      - 'theta2_pbp.py'
+      - 'theta2_pbp_web.py'
+      - 'requirements.txt'
+      - 'requirements-local.txt'
+      - 'tests/test_mp2_pbp.py'
+      - 'tests/test_theta2_pbp.py'
+      - 'tests/test_theta2_pbp_web.py'
+      - 'web/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  calculator:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install calculator dependencies
+        run: python -m pip install -r requirements-local.txt
+
+      - name: Run SO and Mp calculator regressions
+        run: |
+          python tests/test_theta2_pbp.py
+          python tests/test_mp2_pbp.py
+          python tests/test_theta2_pbp_web.py
+
+      - name: Check browser JavaScript syntax
+        run: node --check web/app.js
