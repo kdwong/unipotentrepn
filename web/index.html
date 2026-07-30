@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="Explore fine lowest K-type theta-lift paths, painted bipartitions, and associated cycles."
+      content="Compute theta-lift paths, painted bipartitions, and associated cycles for special unipotent representations of SO(n,n+1) and Mp(2n,R)."
     />
     <!--
       Leave this empty for the local Python server. For GitHub Pages, set it to
@@ -14,7 +14,7 @@
     -->
     <meta name="theta-api-url" content="" />
     <meta name="theme-color" content="#f4efe4" />
-    <title>Theta Atlas · Painted Bipartitions and Associated Cycles</title>
+    <title>Theta-Lift Calculator</title>
     <link rel="stylesheet" href="styles.css" />
     <script src="app.js" defer></script>
   </head>
@@ -22,26 +22,40 @@
     <a class="skip-link" href="#main-content">Skip to calculator</a>
 
     <header class="site-header">
-      <a class="brand" href="#" aria-label="Lowest harmonic chains, painted bipartitions, and associated cycles home">
-        <span class="brand-name">Lowest harmonic chains, painted bipartitions, and associated cycles</span>
+      <a class="brand" href="#" aria-label="Theta-Lift Calculator home">
+        <h1 class="brand-name">Theta-Lift Calculator</h1>
       </a>
       <span class="local-badge"><span aria-hidden="true"></span><span class="runtime-label">Local computation</span></span>
     </header>
 
     <main id="main-content">
+      <fieldset class="group-selector" aria-describedby="group-selector-hint">
+        <legend>Choose the real group</legend>
+        <div class="group-options">
+          <label>
+            <input type="radio" name="group" value="so" checked />
+            <span>SO(<i>n</i>,<i>n</i>+1)</span>
+          </label>
+          <label>
+            <input type="radio" name="group" value="mp" />
+            <span>Mp(2<i>n</i>, ℝ)</span>
+          </label>
+        </div>
+        <p id="group-selector-hint">The same dual orbit input is used for either calculation.</p>
+      </fieldset>
+
       <section class="hero" aria-label="Program description and calculator">
         <div class="hero-copy">
           <p class="lede program-description">
-            Let <span class="math">G = SO(n,n+1)</span>. This program computes all
-            theta lift chains that gives a special unipotent representation of
-            <span class="math">G</span> with lowest harmonics equal to a fine
-            <span class="math">K</span>-type. For each chain, the program also
-            computes its corresponding painted bipartition and associated cycle.
+            This program computes all theta-lift paths that give a special unipotent
+            representation of <span id="program-group" class="math">G = SO(n,n+1)</span>
+            with lowest harmonics equal to a fine <span class="math">K</span>-type. For
+            each path, the program also computes its painted bipartition and associated cycle.
           </p>
 
           <section class="sources sources-inline" aria-labelledby="sources-title">
             <div class="sources-heading">
-              <h2 id="sources-title">Sources:</h2>
+              <h2 id="sources-title">References:</h2>
             </div>
             <div class="source-list">
               <p>
@@ -147,7 +161,7 @@
         </section>
 
         <nav class="k-navigation" aria-label="Jump to fine lowest K-type">
-          <span>Fine K-type</span>
+          <span id="k-navigation-label">Fine K-type</span>
           <div id="k-links"></div>
         </nav>
 

@@ -19,6 +19,7 @@ files, and push them there. Do not try to deploy uncommitted local files.
 The backend needs at least:
 
 - `theta2_pbp.py`
+- `mp2_pbp.py`
 - `theta2_pbp_web.py`
 - `standalone.py`
 - `combunipotent/`
@@ -82,12 +83,16 @@ Optionally add this link to the main `index.html` of the personal site:
 
 ## 4. Final check
 
-Open the public calculator in a private browser window, calculate `(4)`, and
-confirm that:
+Open the public calculator in a private browser window. First choose
+`SO(n,n+1)`, calculate `(4)`, and confirm that:
 
 - the final form is `O(2,3)`;
 - both targets `(00|000)` and `(11|000)` appear, in that order;
 - the three source links at the bottom open correctly.
+
+Then choose `Mp(2n,R)`, calculate `(4,2)`, and confirm that the page displays
+the four paths `{}`, `{1}`, `{2}`, and `{1,2}`, each with its type-M painted
+bipartition and associated cycle.
 
 The first request can take longer if a free backend has gone idle. A paid
 always-on instance removes that startup delay.

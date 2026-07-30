@@ -15,7 +15,9 @@ from theta2_pbp_web import (  # noqa: E402
     CALCULATION_CACHE,
     RequestError,
     create_server,
+    parse_group_value,
     parse_orbit_value,
+    parse_request_body,
     serialize_calculation,
 )
 
@@ -31,6 +33,41 @@ def test_orbit_parser() -> None:
             pass
         else:
             raise AssertionError(f"expected invalid orbit input to fail: {invalid!r}")
+
+
+def test_group_and_request_parser() -> None:
+    assert parse_group_value(None) == "so"
+    assert parse_group_value("so") == "so"
+    assert parse_group_value("SO(n,n+1)") == "so"
+    assert parse_group_value("mp") == "mp"
+    assert parse_group_value("Mp(2n,R)") == "mp"
+
+    assert parse_request_body(json.dumps({"orbit": [4]}).encode("utf-8")) == (
+        "so",
+        (4,),
+    )
+    assert parse_request_body(
+        json.dumps({"group": "mp", "orbit": [4, 2]}).encode("utf-8")
+    ) == ("mp", (4, 2))
+
+    for invalid in ("", "sp", 1, True, ["mp"]):
+        try:
+            parse_group_value(invalid)
+        except RequestError:
+            pass
+        else:
+            raise AssertionError(f"expected invalid group to fail: {invalid!r}")
+
+    try:
+        parse_request_body(
+            json.dumps(
+                {"group": "mp", "orbit": [4, 2], "final_form": [3, 4]}
+            ).encode("utf-8")
+        )
+    except RequestError as error:
+        assert "only to SO(n,n+1)" in str(error)
+    else:
+        raise AssertionError("expected final_form to be rejected for Mp")
 
 
 def test_explicit_paths_grouping_fixed_form_and_cache() -> None:
@@ -66,7 +103,7 @@ def test_explicit_paths_grouping_fixed_form_and_cache() -> None:
     } == {0, 2}
     assert all("all_o_extensions" not in group for group in k0["groups"])
 
-    # The single orbit-keyed cache reuses the fixed O(n,n+1) calculation.
+    # The SO branch of the group-and-orbit cache reuses this calculation.
     assert serialize_calculation((4,)) is payload
 
     repeated = serialize_calculation((2, 2, 2, 2, 2, 2))
@@ -235,6 +272,85 @@ def test_explicit_paths_grouping_fixed_form_and_cache() -> None:
     )
 
 
+def test_metaplectic_serialization_and_group_cache() -> None:
+    CALCULATION_CACHE.clear()
+    part = (4, 2)
+    payload = serialize_calculation(part, group="mp")
+
+    assert payload["group"] == "mp"
+    assert payload["group_label"] == "Mp(2n,R)"
+    assert payload["orbit"] == [4, 2]
+    assert payload["totals"] == [3, 6]
+    assert payload["tower"] == ["Mp(0)", "O(3)", "Mp(6)"]
+    assert payload["final_group_label"] == "Mp(6,R)"
+    assert payload["rank"] == 3
+    assert payload["path_index_set_size"] == 2
+    assert payload["expected_path_count"] == 4
+    assert sum(
+        section["concrete_path_count"] for section in payload["results"]
+    ) == 4
+
+    paths_by_subset = {}
+    for section in payload["results"]:
+        assert section["title"] == "Fine genuine U(n)-type"
+        for group in section["groups"]:
+            cycle = group["associated_cycle"]
+            assert cycle["terms"]
+            assert cycle["term_count"] == len(cycle["terms"])
+            assert cycle["total_multiplicity"] == sum(
+                term["coefficient"] for term in cycle["terms"]
+            )
+            for term in cycle["terms"]:
+                assert term["coefficient"] > 0
+                assert term["marked_rows"]
+            for path in group["paths"]:
+                subset = tuple(path["subset_indices"])
+                assert subset not in paths_by_subset
+                paths_by_subset[subset] = (section, group, path)
+
+    assert set(paths_by_subset) == {(), (1,), (2,), (1, 2)}
+    expected = {
+        (): (
+            ("-1/2", "-1/2", "-1/2"),
+            (["sc"], ["d"]),
+            (),
+        ),
+        (1,): (
+            ("1/2", "-1/2", "-1/2"),
+            (["*"], ["*r"]),
+            (0,),
+        ),
+        (2,): (
+            ("1/2", "1/2", "-1/2"),
+            (["sc"], ["r"]),
+            (),
+        ),
+        (1, 2): (
+            ("1/2", "1/2", "1/2"),
+            (["ss"], ["d"]),
+            (),
+        ),
+    }
+    for subset, (expected_weight, expected_pbp, expected_wp) in expected.items():
+        section, group, path = paths_by_subset[subset]
+        pbp = group["pbp"]
+        assert tuple(path["final"]["mp_weight"]) == expected_weight
+        assert path["left_degree"] == section["k"]
+        assert path["name"] == f'Path {path["subset_label"]}'
+        assert (pbp["p"], pbp["q"]) == expected_pbp
+        assert tuple(pbp["primitive_pair_indices"]) == expected_wp
+        assert pbp["parameter_type"] == "M"
+    assert paths_by_subset[(1,)][1]["pbp"]["primitive_pairs"] == [[1, 2]]
+
+    so_payload = serialize_calculation(part)
+    assert so_payload["group"] == "so"
+    assert so_payload is serialize_calculation(part, group="so")
+    assert payload is serialize_calculation(part, group="mp")
+    assert so_payload is not payload
+    assert ("so", part) in CALCULATION_CACHE
+    assert ("mp", part) in CALCULATION_CACHE
+
+
 def test_http_api() -> None:
     server = create_server("127.0.0.1", 0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -254,8 +370,23 @@ def test_http_api() -> None:
         document = json.loads(response.read())
         assert response.status == 200
         assert response.getheader("Content-Type") == "application/json; charset=utf-8"
+        assert document["group"] == "so"
         assert document["final_form"] == {"p": 2, "q": 3}
         assert document["results"][0]["distinct_pbp_count"] == 2
+
+        mp_body = json.dumps({"group": "mp", "orbit": [4, 2]}).encode("utf-8")
+        connection.request(
+            "POST",
+            "/api/calculate",
+            body=mp_body,
+            headers={"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        mp_document = json.loads(response.read())
+        assert response.status == 200
+        assert mp_document["group"] == "mp"
+        assert mp_document["tower"] == ["Mp(0)", "O(3)", "Mp(6)"]
+        assert mp_document["expected_path_count"] == 4
 
         local_origin = f"http://127.0.0.1:{server.server_address[1]}"
         connection.request(
@@ -303,6 +434,20 @@ def test_http_api() -> None:
         response.read()
         assert response.status == 403
 
+        invalid_group_body = json.dumps(
+            {"group": "sp", "orbit": [4]}
+        ).encode("utf-8")
+        connection.request(
+            "POST",
+            "/api/calculate",
+            body=invalid_group_body,
+            headers={"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        error = json.loads(response.read())
+        assert response.status == 400
+        assert "'so' or 'mp'" in error["error"]
+
         bad_body = json.dumps({"orbit": [4], "final_form": [3, 2]}).encode("utf-8")
         connection.request(
             "POST",
@@ -326,6 +471,10 @@ def test_http_api() -> None:
         assert response.status == 200
         assert 'name="final-orientation"' not in html
         assert "SO(n,n+1)" in html
+        assert 'class="group-selector"' in html
+        assert 'name="group" value="so" checked' in html
+        assert 'name="group" value="mp"' in html
+        assert "Mp(2<i>n</i>, ℝ)" in html
         assert "painted bipartition and associated cycle" in html
         assert 'class="associated-cycle-panel"' in html
         assert "nontrivial on +" in html
@@ -339,7 +488,11 @@ def test_http_api() -> None:
         response = connection.getresponse()
         javascript = response.read().decode("utf-8")
         assert response.status == 200
-        assert 'body: JSON.stringify({ orbit })' in javascript
+        assert 'body: JSON.stringify({ group, orbit })' in javascript
+        assert 'input[name="group"]' in javascript
+        assert "handleGroupChange" in javascript
+        assert 'groupKind === "mp"' in javascript
+        assert "not an enumeration of every type-M extended PBP" in javascript
         assert "final-orientation" not in javascript
         assert "pathHistoryPreview(path.realizations)" in javascript
         assert "Path subsets index the rows of the dual orbit from bottom to top." in javascript
@@ -366,7 +519,9 @@ def test_http_api() -> None:
 def main() -> None:
     tests = (
         test_orbit_parser,
+        test_group_and_request_parser,
         test_explicit_paths_grouping_fixed_form_and_cache,
+        test_metaplectic_serialization_and_group_cache,
         test_http_api,
     )
     for test in tests:

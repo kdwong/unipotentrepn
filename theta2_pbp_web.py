@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Local web interface for the painted-bipartition theta-chain calculator.
+"""Web API for the SO(n,n+1) and Mp(2n,R) theta-path calculator.
 
 Run this file, then open the printed address in a browser.  The server uses
 only Python's standard library; all mathematical work is delegated to
-``theta2_pbp.calculate`` so the command-line and browser interfaces share the
-same strict-Ma concrete-path computation.
+the project calculators so the command-line and browser interfaces share the
+same strict-Ma concrete-path computations.
 """
 
 from __future__ import annotations
@@ -73,7 +73,18 @@ from theta2_pbp import (  # noqa: E402 (the venv relaunch must happen first)
     theta_subset_bits,
     validate_dual_orbit,
 )
-from standalone import compute_AC, str_ils  # noqa: E402
+from mp2_pbp import (  # noqa: E402
+    MetaplecticConcretePath,
+    MetaplecticFineChain,
+    MetaplecticPaintedBipartition,
+    calculate_metaplectic,
+)
+from standalone import (  # noqa: E402
+    compute_AC,
+    dpart2Wrepns_with_wp,
+    dpart_to_bipartition,
+    str_ils,
+)
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -92,7 +103,7 @@ ALLOWED_ORIGINS = DEFAULT_ALLOWED_ORIGINS | frozenset(
 CALCULATION_LOCK = threading.Lock()
 CALCULATION_CACHE_SIZE = 8
 CALCULATION_CACHE: OrderedDict[
-    tuple[int, ...],
+    tuple[str, tuple[int, ...]],
     dict[str, Any],
 ] = OrderedDict()
 
@@ -213,23 +224,23 @@ def _subset_label(indices: tuple[int, ...]) -> str:
     return "{" + ", ".join(map(str, indices)) + "}"
 
 
-def _serialize_associated_cycle(
-    pbp: PaintedBipartition,
+def _serialize_associated_cycle_data(
+    reference_drc: tuple[tuple[str, ...], tuple[str, ...]],
+    primitive_pair_indices: Iterable[int],
+    parameter_type: str,
     cache: dict[Any, Any],
 ) -> dict[str, Any]:
     """Serialize the associated-cycle terms as marked Young diagrams.
 
     The associated-cycle descent is defined on the special reference DRC.
-    ``extended_drc`` is the shifted diagram displayed by the painted-
-    bipartition panel and is not a valid substitute in this calculation.
+    The shifted diagram displayed by the painted-bipartition panel is not a
+    valid substitute in this calculation.
     """
 
-    reference_drc = pbp.special_reference_extended_drc or pbp.extended_drc
-    primitive_pair_indices = frozenset(pbp.primitive_pair_indices)
     raw_terms = compute_AC(
         reference_drc,
-        primitive_pair_indices,
-        pbp.gamma,
+        frozenset(primitive_pair_indices),
+        parameter_type,
         cache=cache,
     )
 
@@ -266,6 +277,21 @@ def _serialize_associated_cycle(
         "total_multiplicity": sum(term["coefficient"] for term in terms),
         "terms": terms,
     }
+
+
+def _serialize_associated_cycle(
+    pbp: PaintedBipartition,
+    cache: dict[Any, Any],
+) -> dict[str, Any]:
+    """Serialize the associated cycle of a type-B parameter."""
+
+    reference_drc = pbp.special_reference_extended_drc or pbp.extended_drc
+    return _serialize_associated_cycle_data(
+        reference_drc,
+        pbp.primitive_pair_indices,
+        pbp.gamma,
+        cache,
+    )
 
 
 def _serialize_group_path(
@@ -319,7 +345,109 @@ def _serialize_group_path(
     return serialized
 
 
-def _serialize_uncached(
+def _serialize_metaplectic_chain_structure(
+    chain: MetaplecticFineChain,
+) -> dict[str, Any]:
+    """Expose the structured M-ending theta chain for one fine weight."""
+
+    transitions = []
+    for transition in chain.transitions:
+        transitions.append(
+            {
+                "orthogonal_form": {"p": transition.p, "q": transition.q},
+                "initial_character": transition.initial_character,
+                "base_left": list(transition.base_left),
+                "base_right": list(transition.base_right),
+                "twist_labels": list(transition.twist_labels),
+                "twisted_left": list(transition.twisted_left),
+                "twisted_right": list(transition.twisted_right),
+                "mp_total": transition.mp_total,
+                "mp_weight": [
+                    _fraction_text(value) for value in transition.mp_weight
+                ],
+            }
+        )
+    final_label = chain.display_steps()[-1].removesuffix(" [lowest harmonic]")
+    return {
+        "transitions": transitions,
+        "final": {
+            "group": f"Mp({chain.final_mp_total},R)",
+            "mp_total": chain.final_mp_total,
+            "mp_weight": [
+                _fraction_text(value) for value in chain.final_mp_weight
+            ],
+            "label": final_label,
+            "exact_label": final_label,
+            "left_degree": chain.fine_degree,
+        },
+    }
+
+
+def _serialize_metaplectic_pbp(
+    pbp: MetaplecticPaintedBipartition,
+) -> dict[str, Any]:
+    """Serialize one actual type-M painted bipartition and its reference."""
+
+    raw_p, raw_q = pbp.raw_drc
+    special_p, special_q = pbp.special_reference_drc
+    primitive_pairs = [list(pair) for pair in pbp.primitive_pairs]
+    return {
+        "p": list(raw_p),
+        "q": list(raw_q),
+        "parameter_type": "M",
+        "primitive_pair_indices": list(pbp.primitive_pair_indices),
+        "primitive_pairs": primitive_pairs,
+        "primitive_pairs_label": (
+            "∅"
+            if not primitive_pairs
+            else "{" + ", ".join(
+                f"({left},{right})" for left, right in pbp.primitive_pairs
+            ) + "}"
+        ),
+        "extended_drc": [list(raw_p), list(raw_q)],
+        "raw_extended_drc": [list(raw_p), list(raw_q)],
+        "special_reference_extended_drc": [
+            list(special_p),
+            list(special_q),
+        ],
+        "one_line": pbp.one_line(),
+    }
+
+
+def _serialize_metaplectic_path(
+    path: MetaplecticConcretePath,
+) -> dict[str, Any]:
+    """Serialize one subset-labelled M-ending concrete twist history."""
+
+    subset_slug = "-".join(map(str, path.subset_indices)) or "empty"
+    steps = list(path.display_steps)
+    realization = {
+        "twist_history": list(path.history),
+        "twist_history_text": path.history_text,
+        "steps": steps,
+    }
+    serialized = {
+        "id": path.number,
+        "stable_id": f"mp-path-subset-{subset_slug}",
+        "name": path.name,
+        "number": path.number,
+        "subset_bits": list(path.subset_bits),
+        "subset_indices": list(path.subset_indices),
+        "subset_label": path.subset_label,
+        "selected_half_row_sum": path.selected_half_row_sum,
+        "target_label": path.final_weight_text,
+        "left_degree": path.fine_degree,
+        "text": " -> ".join(steps),
+        "steps": steps,
+        "concrete_realizations": [realization],
+        "twist_histories": [list(path.history)],
+        "twist_history_texts": [path.history_text],
+    }
+    serialized.update(_serialize_metaplectic_chain_structure(path.chain))
+    return serialized
+
+
+def _serialize_so_uncached(
     part: tuple[int, ...],
 ) -> dict[str, Any]:
     """Perform one calculation and build the complete browser data model."""
@@ -425,6 +553,8 @@ def _serialize_uncached(
         )
 
     return {
+        "group": "so",
+        "group_label": "SO(n,n+1)",
         "orbit": list(part),
         "orbit_text": "(" + ", ".join(map(str, part)) + ")",
         "ambient_group": f"Sp({2 * n}, C)",
@@ -442,27 +572,188 @@ def _serialize_uncached(
         "totals": list(totals),
         "tower": tower,
         "final_form": {"p": final_form[0], "q": final_form[1]},
+        "final_group_label": f"O({final_form[0]},{final_form[1]})",
+        "path_index_set_size": len(part),
+        "expected_path_count": 2 ** len(part),
         "results": labels,
     }
 
 
+def _serialize_metaplectic_uncached(
+    part: tuple[int, ...],
+) -> dict[str, Any]:
+    """Perform one type-M calculation and build the browser data model."""
+
+    calculation = calculate_metaplectic(part)
+    associated_cycle_cache: dict[Any, Any] = {}
+    expected_path_count = 2 ** len(part)
+    if len(calculation.paths) != expected_path_count:
+        raise RuntimeError(
+            "the metaplectic calculation did not produce one path per row subset"
+        )
+
+    subset_bits = {path.subset_bits for path in calculation.paths}
+    if len(subset_bits) != expected_path_count:
+        raise RuntimeError("the metaplectic path labels do not form the full powerset")
+
+    empty_wp_p, empty_wp_q = dpart_to_bipartition(part, "M")
+    allowed_shapes = []
+    allowed_shape_map = dpart2Wrepns_with_wp(part, "M")
+    for wp, (p_shape, q_shape) in sorted(
+        allowed_shape_map.items(),
+        key=lambda item: tuple(sorted(item[0])),
+    ):
+        primitive_pair_indices = tuple(sorted(wp))
+        primitive_pairs = [
+            [2 * index + 1, 2 * index + 2]
+            for index in primitive_pair_indices
+        ]
+        allowed_shapes.append(
+            {
+                "primitive_pair_indices": list(primitive_pair_indices),
+                "primitive_pairs": primitive_pairs,
+                "primitive_pairs_label": (
+                    "∅"
+                    if not primitive_pairs
+                    else "{" + ", ".join(
+                        f"({left},{right})" for left, right in primitive_pairs
+                    ) + "}"
+                ),
+                "p": list(p_shape),
+                "q": list(q_shape),
+            }
+        )
+
+    paths_by_degree: dict[int, list[MetaplecticConcretePath]] = {}
+    for path in calculation.paths:
+        paths_by_degree.setdefault(path.fine_degree, []).append(path)
+
+    results = []
+    for degree in sorted(paths_by_degree):
+        degree_paths = sorted(
+            paths_by_degree[degree],
+            key=lambda path: path.number,
+        )
+        grouped: dict[
+            tuple[Any, ...],
+            list[MetaplecticConcretePath],
+        ] = {}
+        for path in degree_paths:
+            grouped.setdefault(
+                path.painted_bipartition.parameter_key,
+                [],
+            ).append(path)
+
+        groups = []
+        for group_number, parameter_key in enumerate(sorted(grouped), start=1):
+            group_paths = grouped[parameter_key]
+            pbp = group_paths[0].painted_bipartition
+            groups.append(
+                {
+                    "id": f"mp-k{degree}-pbp-{group_number}",
+                    "number": group_number,
+                    "pbp": _serialize_metaplectic_pbp(pbp),
+                    "associated_cycle": _serialize_associated_cycle_data(
+                        pbp.special_reference_drc,
+                        pbp.primitive_pair_indices,
+                        "M",
+                        associated_cycle_cache,
+                    ),
+                    "path_count": len(group_paths),
+                    "path_occurrence_count": len(group_paths),
+                    "paths": [
+                        _serialize_metaplectic_path(path)
+                        for path in group_paths
+                    ],
+                }
+            )
+
+        final_weight_label = degree_paths[0].final_weight_text
+        results.append(
+            {
+                "k": degree,
+                "label": final_weight_label,
+                "title": "Fine genuine U(n)-type",
+                "degree_description": (
+                    f"The final weight has {degree} entries +1/2 and "
+                    f"{calculation.rank - degree} entries -1/2."
+                ),
+                "concrete_path_count": len(degree_paths),
+                "distinct_pbp_count": len(groups),
+                "groups": groups,
+            }
+        )
+
+    return {
+        "group": "mp",
+        "group_label": "Mp(2n,R)",
+        "orbit": list(part),
+        "orbit_text": "(" + ", ".join(map(str, part)) + ")",
+        "ambient_group": f"Sp({sum(part)}, C)",
+        "expected_bipartition": {
+            "p": list(empty_wp_p),
+            "q": list(empty_wp_q),
+        },
+        "empty_wp_bipartition": {
+            "p": list(empty_wp_p),
+            "q": list(empty_wp_q),
+        },
+        "allowed_bipartition_shapes": allowed_shapes,
+        "totals": list(calculation.totals),
+        "tower": list(calculation.tower),
+        "final_group_label": f"Mp({sum(part)},R)",
+        "rank": calculation.rank,
+        "path_index_set_size": len(part),
+        "expected_path_count": expected_path_count,
+        "results": results,
+    }
+
+
+def parse_group_value(value: Any) -> str:
+    """Normalize the two public calculator choices."""
+
+    if value is None:
+        return "so"
+    if not isinstance(value, str):
+        raise RequestError("The 'group' field must be 'so' or 'mp'.")
+    group = value.strip().casefold()
+    aliases = {
+        "so": "so",
+        "so(n,n+1)": "so",
+        "mp": "mp",
+        "mp(2n,r)": "mp",
+        "mp(2n,ℝ)": "mp",
+    }
+    try:
+        return aliases[group]
+    except KeyError as error:
+        raise RequestError("The 'group' field must be 'so' or 'mp'.") from error
+
+
 def serialize_calculation(
     partition: Iterable[int],
+    group: str = "so",
 ) -> dict[str, Any]:
-    """Return a JSON-ready model for the fixed ``O(n,n+1)`` convention."""
+    """Return a JSON-ready model for the selected real-group convention."""
 
     part = validate_dual_orbit(partition)
+    group_kind = parse_group_value(group)
+    cache_key = (group_kind, part)
     # Keep the lookup and calculation under one lock.  In addition to guarding
     # upstream stdout redirection, this prevents two simultaneous requests for
     # a large orbit from both doing the same expensive work.
     with CALCULATION_LOCK:
-        cached = CALCULATION_CACHE.get(part)
+        cached = CALCULATION_CACHE.get(cache_key)
         if cached is not None:
-            CALCULATION_CACHE.move_to_end(part)
+            CALCULATION_CACHE.move_to_end(cache_key)
             return cached
-        payload = _serialize_uncached(part)
-        CALCULATION_CACHE[part] = payload
-        CALCULATION_CACHE.move_to_end(part)
+        payload = (
+            _serialize_metaplectic_uncached(part)
+            if group_kind == "mp"
+            else _serialize_so_uncached(part)
+        )
+        CALCULATION_CACHE[cache_key] = payload
+        CALCULATION_CACHE.move_to_end(cache_key)
         while len(CALCULATION_CACHE) > CALCULATION_CACHE_SIZE:
             CALCULATION_CACHE.popitem(last=False)
         return payload
@@ -497,7 +788,7 @@ def parse_orbit_value(value: Any) -> tuple[int, ...]:
 
 def parse_request_body(
     body: bytes,
-) -> tuple[int, ...]:
+) -> tuple[str, tuple[int, ...]]:
     try:
         document = json.loads(body.decode("utf-8"))
     except UnicodeDecodeError as error:
@@ -508,12 +799,15 @@ def parse_request_body(
         raise RequestError("The JSON body must be an object with an 'orbit' field.")
     if "orbit" not in document:
         raise RequestError("The JSON body is missing the 'orbit' field.")
+    group = parse_group_value(document.get("group"))
     part = parse_orbit_value(document["orbit"])
     # Accept the now-obsolete field only when it repeats the fixed convention,
     # so an already-open copy of the old page continues to work after refresh.
     final_form_value = document.get("final_form")
     if final_form_value is None:
-        return part
+        return group, part
+    if group != "so":
+        raise RequestError("The 'final_form' field applies only to SO(n,n+1).")
     if (
         not isinstance(final_form_value, list)
         or len(final_form_value) != 2
@@ -528,7 +822,7 @@ def parse_request_body(
         resolve_final_form(sum(part) + 1, final_form)
     except ValueError as error:
         raise RequestError(str(error)) from error
-    return part
+    return group, part
 
 
 class ThetaPBPRequestHandler(BaseHTTPRequestHandler):
@@ -600,8 +894,8 @@ class ThetaPBPRequestHandler(BaseHTTPRequestHandler):
                     f"Request body exceeds {MAX_REQUEST_BYTES} bytes.",
                     HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
                 )
-            orbit = parse_request_body(self.rfile.read(content_length))
-            payload = serialize_calculation(orbit)
+            group, orbit = parse_request_body(self.rfile.read(content_length))
+            payload = serialize_calculation(orbit, group=group)
         except RequestError as error:
             self._send_error_json(error.status, str(error))
             return

@@ -20,8 +20,8 @@
   --plum-light: #ece2ea;
   --shadow-sm: 0 1px 2px rgb(28 42 38 / 5%), 0 7px 22px rgb(57 42 23 / 5%);
   --shadow-md: 0 2px 4px rgb(28 42 38 / 5%), 0 18px 48px rgb(57 42 23 / 9%);
-  --serif: Georgia, "Times New Roman", Times, serif;
-  --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --serif: Arial, sans-serif;
+  --sans: Arial, sans-serif;
   color-scheme: light;
 }
 
@@ -85,12 +85,16 @@ summary:focus-visible {
 }
 
 .site-header {
-  width: min(1180px, calc(100% - 48px));
-  margin: 0 auto;
-  padding: 24px 0 20px;
+  position: relative;
+  width: 100%;
+  margin: 0;
+  padding: 1em 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  color: #fff;
+  background: #b795c0;
+  text-align: center;
 }
 
 .brand {
@@ -122,11 +126,12 @@ summary:focus-visible {
 }
 
 .brand-name {
-  font-family: var(--serif);
-  font-size: 19px;
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 150%;
   font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
+  letter-spacing: normal;
+  line-height: normal;
 }
 
 .brand-note {
@@ -139,14 +144,16 @@ summary:focus-visible {
 }
 
 .local-badge {
+  position: absolute;
+  right: 1em;
   display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 7px 11px;
-  color: var(--ink-soft);
-  border: 1px solid var(--line);
+  color: #fff;
+  border: 1px solid rgb(255 255 255 / 55%);
   border-radius: 999px;
-  background: rgb(255 253 248 / 56%);
+  background: rgb(255 255 255 / 14%);
   font-size: 12px;
   font-weight: 650;
   letter-spacing: 0.02em;
@@ -166,9 +173,82 @@ main {
   margin: 0 auto;
 }
 
+.group-selector {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 28px 0 0;
+  border: 0;
+  text-align: center;
+}
+
+.group-selector legend {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 0;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.group-options {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(150px, 1fr));
+  gap: 4px;
+  padding: 4px;
+  background: rgb(255 253 248 / 78%);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  box-shadow: var(--shadow-sm);
+}
+
+.group-options label {
+  position: relative;
+  cursor: pointer;
+}
+
+.group-options input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.group-options span {
+  min-height: 42px;
+  padding: 9px 16px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-soft);
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: 700;
+  transition: color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+
+.group-options input:checked + span {
+  color: #fff;
+  background: var(--teal);
+  box-shadow: 0 3px 12px rgb(22 79 75 / 18%);
+}
+
+.group-options input:focus-visible + span {
+  outline: 3px solid rgb(185 77 53 / 28%);
+  outline-offset: 3px;
+}
+
+#group-selector-hint {
+  margin: 7px 0 0;
+  color: var(--ink-faint);
+  font-size: 12px;
+}
+
 .hero {
   min-height: 475px;
-  padding: 58px 0 74px;
+  padding: 38px 0 74px;
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(430px, 0.95fr);
   align-items: center;
@@ -220,7 +300,7 @@ h1 em {
 
 .program-description {
   color: var(--ink);
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 19px;
   line-height: 1.65;
 }
@@ -1514,13 +1594,24 @@ h1 em {
 }
 
 @media (max-width: 640px) {
-  .site-header,
   main {
     width: min(100% - 28px, 1180px);
   }
 
-  .site-header {
-    padding-top: 16px;
+  .group-selector {
+    width: 100%;
+    padding-top: 22px;
+  }
+
+  .group-options {
+    width: 100%;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .group-options span {
+    padding-right: 9px;
+    padding-left: 9px;
+    font-size: 13px;
   }
 
   .brand-note,
@@ -1684,7 +1775,7 @@ h1 em {
   :root { --paper: #fff; --surface: #fff; }
 
   body { background: #fff; }
-  .site-header, .hero, .loading-view, .k-navigation, .toggle-paths { display: none !important; }
+  .site-header, .group-selector, .hero, .loading-view, .k-navigation, .toggle-paths { display: none !important; }
   main { width: 100%; }
   .results-view { padding: 0; border: 0; }
   .pbp-group, .tower-panel { break-inside: avoid; box-shadow: none; }

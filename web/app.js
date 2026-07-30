@@ -2,7 +2,7 @@
  * Theta Atlas API contract
  * ------------------------
  * POST /api/calculate
- * request:  { "orbit": [8, 6, 4, 4, 2, 2, 2, 2] }
+ * request:  { "group": "so" | "mp", "orbit": [8, 6, 4, 4, 2, 2, 2, 2] }
  * response: {
  *   "orbit": [8, 6, 4, 4, 2, 2, 2, 2],
  *   "totals": [1, 2, 5, 6, 9, 12, 17, 22, 31],
@@ -44,6 +44,8 @@
     document.querySelector('meta[name="theta-api-url"]')?.content.trim() || "";
   const API_URL = configuredApiUrl || "/api/calculate";
   const form = document.querySelector("#orbit-form");
+  const groupInputs = [...document.querySelectorAll('input[name="group"]')];
+  const programGroup = document.querySelector("#program-group");
   const orbitInput = document.querySelector("#orbit-input");
   const orbitInputWrap = document.querySelector(".orbit-input-wrap");
   const orbitError = document.querySelector("#orbit-error");
@@ -57,6 +59,7 @@
   const resultStats = document.querySelector("#result-stats");
   const towerElement = document.querySelector("#tower");
   const finalFormElement = document.querySelector("#final-form");
+  const kNavigationLabel = document.querySelector("#k-navigation-label");
   const kLinks = document.querySelector("#k-links");
   const kResults = document.querySelector("#k-results");
   const pbpTemplate = document.querySelector("#pbp-group-template");
@@ -71,6 +74,7 @@
   }
 
   form.addEventListener("submit", handleSubmit);
+  groupInputs.forEach((input) => input.addEventListener("change", handleGroupChange));
 
   document.querySelectorAll(".example-chip").forEach((button) => {
     button.addEventListener("click", () => {
@@ -81,6 +85,7 @@
   });
 
   orbitInput.addEventListener("input", clearError);
+  updateGroupCopy();
 
   if (window.location.protocol === "file:") {
     calculateButton.disabled = true;
@@ -103,6 +108,7 @@
       showError(error.message);
       return;
     }
+    const group = selectedGroup();
     if (activeRequest) activeRequest.abort();
     const requestController = new AbortController();
     activeRequest = requestController;
@@ -112,7 +118,7 @@
       const response = await fetch(API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ orbit }),
+        body: JSON.stringify({ group, orbit }),
         signal: requestController.signal,
       });
 
@@ -126,11 +132,11 @@
         throw new Error(reason);
       }
 
-      const result = normalizeResponse(payload, orbit);
+      const result = normalizeResponse(payload, orbit, group);
       renderResults(result);
       setLoading(false);
       resultsView.hidden = false;
-      announce(`Calculation complete. Found ${result.results.length} fine K-types.`);
+      announce(`Calculation complete for ${result.groupLabel}. Found ${result.results.length} fine K-types.`);
       resultsView.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "start" });
     } catch (error) {
       if (error.name === "AbortError") return;
@@ -139,6 +145,25 @@
     } finally {
       if (activeRequest === requestController) activeRequest = null;
     }
+  }
+
+  function selectedGroup() {
+    return groupInputs.find((input) => input.checked)?.value === "mp" ? "mp" : "so";
+  }
+
+  function handleGroupChange() {
+    if (activeRequest) activeRequest.abort();
+    activeRequest = null;
+    setLoading(false);
+    resultsView.hidden = true;
+    clearError();
+    updateGroupCopy();
+    orbitInput.focus();
+  }
+
+  function updateGroupCopy() {
+    const isMp = selectedGroup() === "mp";
+    programGroup.textContent = isMp ? "G = Mp(2n, ℝ)" : "G = SO(n,n+1)";
   }
 
   function parseOrbit(value) {
@@ -231,14 +256,34 @@
     }, 20);
   }
 
-  function normalizeResponse(payload, requestedOrbit) {
+  function normalizeResponse(payload, requestedOrbit, requestedGroup) {
     if (!payload || typeof payload !== "object") {
       throw new Error("The calculator returned no result.");
     }
 
+    const groupKind = normalizeGroupKind(payload.group ?? requestedGroup);
+    const groupLabel = String(
+      payload.group_label
+        ?? payload.groupLabel
+        ?? (groupKind === "mp" ? "Mp(2n, ℝ)" : "SO(n,n+1)"),
+    );
     const orbit = toNumberArray(payload.orbit || payload.partition || requestedOrbit);
     const totals = toNumberArray(payload.totals || payload.chain_totals || payload.chainTotals || []);
-    const finalForm = normalizeFinalForm(payload.final_form || payload.finalForm, orbit);
+    const finalForm = groupKind === "so"
+      ? normalizeFinalForm(payload.final_form || payload.finalForm, orbit)
+      : null;
+    const ambientGroup = String(
+      payload.ambient_group
+        ?? payload.ambientGroup
+        ?? `Sp(${orbit.reduce((sum, row) => sum + row, 0)}, ℂ)`,
+    );
+    const finalGroupLabel = String(
+      payload.final_group_label
+        ?? payload.finalGroupLabel
+        ?? (groupKind === "mp"
+          ? `Mp(${orbit.reduce((sum, row) => sum + row, 0)}, ℝ)`
+          : `O(${finalForm.p}, ${finalForm.q})`),
+    );
     const expectedBipartition = normalizeExpectedBipartition(
       payload.expected_bipartition || payload.expectedBipartition,
     );
@@ -248,13 +293,29 @@
     );
     const tower = normalizeTower(payload.tower, totals);
     const sourceResults = payload.results || payload.k_results || payload.kResults || payload.results_by_k;
-    const results = normalizeKResults(sourceResults, finalForm);
+    const results = normalizeKResults(sourceResults, finalForm, groupKind);
 
     if (!results.length) {
       throw new Error("The calculation returned no fine K-type results for this orbit.");
     }
 
-    return { orbit, totals, finalForm, expectedBipartition, allowedBipartitionShapes, tower, results };
+    return {
+      groupKind,
+      groupLabel,
+      orbit,
+      totals,
+      finalForm,
+      finalGroupLabel,
+      ambientGroup,
+      expectedBipartition,
+      allowedBipartitionShapes,
+      tower,
+      results,
+    };
+  }
+
+  function normalizeGroupKind(value) {
+    return String(value || "so").toLowerCase() === "mp" ? "mp" : "so";
   }
 
   function normalizeExpectedBipartition(value) {
@@ -302,7 +363,7 @@
     ];
   }
 
-  function normalizeKResults(value, finalForm) {
+  function normalizeKResults(value, finalForm, groupKind) {
     let entries;
     if (Array.isArray(value)) {
       entries = value.map((section) => [section?.label, section]);
@@ -313,11 +374,13 @@
     }
 
     return entries
-      .map(([key, section], index) => normalizeKSection(section || {}, key, index, finalForm))
+      .map(([key, section], index) =>
+        normalizeKSection(section || {}, key, index, finalForm, groupKind),
+      )
       .sort((a, b) => a.k - b.k);
   }
 
-  function normalizeKSection(section, key, index, finalForm) {
+  function normalizeKSection(section, key, index, finalForm, groupKind) {
     const label = String(section.label || section.k_type || section.kType || key || "");
     const explicitK = section.k ?? section.degree;
     const k = Number.isFinite(Number(explicitK)) ? Number(explicitK) : inferK(label, index);
@@ -337,17 +400,24 @@
         ?? section.pathCount,
       uniquePathCount(groups),
     );
-    const distinctSoPbpCount = numberOr(
-      section.distinct_so_pbp_count ?? section.distinctSoPbpCount ?? section.distinct_pbp_count,
+    const distinctPbpCount = numberOr(
+      section.distinct_pbp_count
+        ?? section.distinctPbpCount
+        ?? section.distinct_so_pbp_count
+        ?? section.distinctSoPbpCount,
       groups.length,
     );
     const oWedgeDegrees = toNumberArray(section.o_wedge_degrees || section.oWedgeDegrees || []);
 
     return {
       k,
-      label: label || constructLabel(k, finalForm),
+      label: label || (groupKind === "so" ? constructLabel(k, finalForm) : `k = ${k}`),
+      title: String(section.title ?? section.heading ?? ""),
+      degreeDescription: String(
+        section.degree_description ?? section.degreeDescription ?? "",
+      ),
       concretePathCount,
-      distinctSoPbpCount,
+      distinctPbpCount,
       oWedgeDegrees,
       middleDegree: Boolean(section.middle_degree ?? section.middleDegree),
       groups,
@@ -363,7 +433,7 @@
     const paths = Array.isArray(pathsSource)
       ? pathsSource.map((path, pathIndex) => normalizePath(path, pathIndex))
       : Object.values(pathsSource).map((path, pathIndex) => normalizePath(path, pathIndex));
-    const epsilonSource = group.outer_epsilon_labels || group.outerEpsilonLabels || [];
+    const epsilonSource = group.outer_epsilon_labels ?? group.outerEpsilonLabels ?? [];
     const outerEpsilons = Array.isArray(epsilonSource)
       ? epsilonSource.map(String)
       : [String(epsilonSource)];
@@ -387,10 +457,14 @@
           .map((pair) => [Number(pair[0]), Number(pair[1])])
       : [];
 
+    const gammaValue = value.gamma ?? value.sign;
     return {
       p,
       q,
-      gamma: String(value.gamma ?? value.sign ?? "—"),
+      gamma: gammaValue == null ? "" : String(gammaValue),
+      parameterType: String(
+        value.parameter_type ?? value.parameterType ?? value.type ?? "",
+      ),
       primitivePairs,
       primitivePairsLabel: String(
         value.primitive_pairs_label
@@ -484,7 +558,7 @@
       histories,
       realizations,
       outerEpsilon: String(
-        value.outer_epsilon_label ?? value.outerEpsilonLabel ?? "—"
+        value.outer_epsilon_label ?? value.outerEpsilonLabel ?? ""
       ),
     };
   }
@@ -566,23 +640,26 @@
     const shapeNote = data.allowedBipartitionShapes.length === 1
       ? ` · ℘ = ∅ shape P = (${data.allowedBipartitionShapes[0].p.join(", ")}), Q = (${data.allowedBipartitionShapes[0].q.join(", ")})`
       : ` · ${data.allowedBipartitionShapes.length} legitimate ℘-dependent PBP shapes`;
-    resultsSubtitle.textContent = `A good-parity orbit in Sp(${data.orbit.reduce((a, b) => a + b, 0)}, ℂ)${shapeNote}`;
+    resultsSubtitle.textContent = `A good-parity orbit in ${data.ambientGroup}${shapeNote}`;
 
     const totalPaths = data.results.reduce((sum, section) => sum + section.concretePathCount, 0);
-    const totalPbps = data.results.reduce((sum, section) => sum + section.distinctSoPbpCount, 0);
+    const totalPbps = data.results.reduce((sum, section) => sum + section.distinctPbpCount, 0);
     resultStats.replaceChildren(
-      makeStat(data.results.length, "K-types"),
+      makeStat(data.results.length, "fine K-types"),
       makeStat(totalPaths, "concrete theta paths"),
       makeStat(totalPbps, "painted bipartitions"),
     );
 
     renderTower(data.tower);
-    finalFormElement.textContent = Number.isFinite(data.finalForm.p) && Number.isFinite(data.finalForm.q)
-      ? `final real form  O(${data.finalForm.p}, ${data.finalForm.q})`
-      : "";
+    finalFormElement.textContent = `final real group  ${data.finalGroupLabel}`;
+    kNavigationLabel.textContent = data.groupKind === "mp"
+      ? "Fine Mp K-type"
+      : "Fine K-type";
 
-    kLinks.replaceChildren(...data.results.map(makeKLink));
-    kResults.replaceChildren(...data.results.map((section) => renderKSection(section)));
+    kLinks.replaceChildren(...data.results.map((section) => makeKLink(section, data.groupKind)));
+    kResults.replaceChildren(
+      ...data.results.map((section) => renderKSection(section, data.groupKind)),
+    );
   }
 
   function makeStat(value, label) {
@@ -604,17 +681,21 @@
     );
   }
 
-  function makeKLink(section) {
+  function makeKLink(section, groupKind) {
     const link = element("a", "k-link");
     link.href = `#k-${section.k}`;
-    link.setAttribute("aria-label", `Jump to k equals ${section.k}`);
-    const one = document.createTextNode("1");
-    const sup = element("sup", "", String(section.k));
-    link.append(one, sup);
+    link.setAttribute("aria-label", `Jump to fine K-type k equals ${section.k}`);
+    if (groupKind === "mp") {
+      link.textContent = String(section.k);
+    } else {
+      const one = document.createTextNode("1");
+      const sup = element("sup", "", String(section.k));
+      link.append(one, sup);
+    }
     return link;
   }
 
-  function renderKSection(section) {
+  function renderKSection(section, groupKind) {
     const article = element("article", "k-result");
     article.id = `k-${section.k}`;
 
@@ -622,13 +703,17 @@
     const type = element("div", "k-type-label");
     type.append(element("span", "k-ordinal", `k = ${section.k}`));
     const heading = element("h3");
-    heading.append(document.createTextNode("1"), element("sup", "", String(section.k)), document.createTextNode(" fine K-type"));
+    if (groupKind === "mp") {
+      heading.textContent = section.title || "Fine metaplectic K-type";
+    } else {
+      heading.append(document.createTextNode("1"), element("sup", "", String(section.k)), document.createTextNode(" fine K-type"));
+    }
     type.append(heading, element("code", "exact-k-label", section.label));
 
     const counts = element("p", "k-counts");
     counts.append(
-      strongText(section.distinctSoPbpCount),
-      document.createTextNode(` painted bipartition${plural(section.distinctSoPbpCount)} · `),
+      strongText(section.distinctPbpCount),
+      document.createTextNode(` painted bipartition${plural(section.distinctPbpCount)} · `),
       strongText(section.concretePathCount),
       document.createTextNode(` concrete theta path${plural(section.concretePathCount)}`),
     );
@@ -636,7 +721,9 @@
     header.append(type, counts);
     article.append(header);
 
-    if (section.oWedgeDegrees.length) {
+    if (groupKind === "mp" && section.degreeDescription) {
+      article.append(element("p", "multi-pbp-note", section.degreeDescription));
+    } else if (section.oWedgeDegrees.length) {
       const degreeText = section.oWedgeDegrees.join(" and ");
       article.append(
         element(
@@ -653,7 +740,9 @@
       element(
         "p",
         "multi-pbp-note",
-        "Path subsets index the rows of the dual orbit from bottom to top.",
+        groupKind === "mp"
+          ? "The 2^r path subsets index the r rows of the dual orbit from bottom to top; the selected half-row lengths sum to k. These are the painted bipartitions reached by the fine-K-type paths, not an enumeration of every type-M extended PBP. The primitive-pair set ℘ uses the separate BMSZ top-to-bottom indexing, and repeated equal rows can make different paths share one painted bipartition."
+          : "Path subsets index the rows of the dual orbit from bottom to top.",
       ),
     );
 
@@ -677,25 +766,33 @@
     }
 
     const groups = element("div", "pbp-groups");
-    section.groups.forEach((group, index) => groups.append(renderPbpGroup(group, index, section.k)));
+    section.groups.forEach((group, index) =>
+      groups.append(renderPbpGroup(group, index, section.k, groupKind)),
+    );
     article.append(groups);
     return article;
   }
 
-  function renderPbpGroup(group, index, k) {
+  function renderPbpGroup(group, index, k, groupKind) {
     const fragment = pbpTemplate.content.cloneNode(true);
     const card = fragment.querySelector(".pbp-group");
     const number = String(index + 1).padStart(2, "0");
     fragment.querySelector(".pbp-number").textContent = number;
-    fragment.querySelector(".pbp-overline").textContent = `${group.paths.length} concrete theta path${plural(group.paths.length)} for this SO parameter`;
+    fragment.querySelector(".pbp-overline").textContent = `${group.paths.length} concrete theta path${plural(group.paths.length)} for this ${groupKind === "mp" ? "Mp" : "SO"} parameter`;
     fragment.querySelector(".pbp-title").textContent = `Painted bipartition ${number}`;
 
     const tags = fragment.querySelector(".pbp-tags");
-    tags.append(element("span", "tag gamma", `γ ${group.pbp.gamma}`));
+    if (group.pbp.gamma) {
+      tags.append(element("span", "tag gamma", `γ ${group.pbp.gamma}`));
+    } else if (group.pbp.parameterType) {
+      tags.append(element("span", "tag gamma", `type ${group.pbp.parameterType}`));
+    }
     tags.append(element("span", "tag wp", `℘ ${group.pbp.primitivePairsLabel}`));
-    tags.append(
-      element("span", "tag outer", `BMSZ outer ε · ${group.outerEpsilons.join(", ") || "none"}`),
-    );
+    if (groupKind === "so") {
+      tags.append(
+        element("span", "tag outer", `BMSZ outer ε · ${group.outerEpsilons.join(", ") || "none"}`),
+      );
+    }
 
     renderTableau(fragment.querySelector(".tableau-p"), group.pbp.p, "P");
     renderTableau(fragment.querySelector(".tableau-q"), group.pbp.q, "Q");
@@ -709,7 +806,9 @@
     const list = fragment.querySelector(".paths-list");
     [...group.paths]
       .sort((left, right) => left.leftDegree - right.leftDegree || left.number - right.number)
-      .forEach((path, pathIndex) => list.append(renderPath(path, pathIndex, k, index)));
+      .forEach((path, pathIndex) =>
+        list.append(renderPath(path, pathIndex, k, index, groupKind)),
+      );
 
     const toggle = fragment.querySelector(".toggle-paths");
     toggle.addEventListener("click", () => {
@@ -836,7 +935,7 @@
     return classes[marker] || "other";
   }
 
-  function renderPath(path, index, k, groupIndex) {
+  function renderPath(path, index, k, groupIndex, groupKind) {
     const details = element("details", "path-card");
     details.id = `path-${k}-${groupIndex + 1}-${path.number ?? index + 1}`;
 
@@ -854,8 +953,10 @@
     );
     summary.append(summaryMain);
     const historyCount = path.realizations.length;
+    if (groupKind === "so" && path.outerEpsilon) {
+      summary.append(element("span", "history-count", `outer ε · ${path.outerEpsilon}`));
+    }
     summary.append(
-      element("span", "history-count", `outer ε · ${path.outerEpsilon}`),
       element("span", "history-count", `${historyCount || 1} twist histor${historyCount === 1 ? "y" : "ies"}`),
       element("span", "path-chevron"),
     );
