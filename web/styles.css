@@ -182,17 +182,6 @@ main {
   text-align: center;
 }
 
-.group-selector legend {
-  width: 100%;
-  margin-bottom: 8px;
-  padding: 0;
-  color: var(--ink-soft);
-  font-size: 11px;
-  font-weight: 750;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
 .group-options {
   display: inline-grid;
   grid-template-columns: repeat(2, minmax(150px, 1fr));
@@ -220,8 +209,10 @@ main {
 .group-options span {
   min-height: 42px;
   padding: 9px 16px;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
   color: var(--ink-soft);
   border-radius: 7px;
   font-size: 14px;
@@ -238,12 +229,6 @@ main {
 .group-options input:focus-visible + span {
   outline: 3px solid rgb(185 77 53 / 28%);
   outline-offset: 3px;
-}
-
-#group-selector-hint {
-  margin: 7px 0 0;
-  color: var(--ink-faint);
-  font-size: 12px;
 }
 
 .hero {

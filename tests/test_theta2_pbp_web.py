@@ -289,6 +289,11 @@ def test_metaplectic_serialization_and_group_cache() -> None:
     assert sum(
         section["concrete_path_count"] for section in payload["results"]
     ) == 4
+    assert [section["k"] for section in payload["results"]] == [0, 1, 2, 3]
+    assert payload["results"][0]["label"] == "(1/2,1/2,1/2)"
+    assert payload["results"][0]["degree_description"] == (
+        "The final weight has 3 entries +1/2 and 0 entries -1/2."
+    )
 
     paths_by_subset = {}
     for section in payload["results"]:
@@ -311,23 +316,23 @@ def test_metaplectic_serialization_and_group_cache() -> None:
     assert set(paths_by_subset) == {(), (1,), (2,), (1, 2)}
     expected = {
         (): (
-            ("-1/2", "-1/2", "-1/2"),
-            (["sc"], ["d"]),
+            ("1/2", "1/2", "1/2"),
+            (["ss"], ["d"]),
             (),
         ),
         (1,): (
-            ("1/2", "-1/2", "-1/2"),
-            (["*"], ["*r"]),
-            (0,),
-        ),
-        (2,): (
             ("1/2", "1/2", "-1/2"),
             (["sc"], ["r"]),
             (),
         ),
+        (2,): (
+            ("1/2", "-1/2", "-1/2"),
+            (["*"], ["*r"]),
+            (0,),
+        ),
         (1, 2): (
-            ("1/2", "1/2", "1/2"),
-            (["ss"], ["d"]),
+            ("-1/2", "-1/2", "-1/2"),
+            (["sc"], ["d"]),
             (),
         ),
     }
@@ -340,7 +345,7 @@ def test_metaplectic_serialization_and_group_cache() -> None:
         assert (pbp["p"], pbp["q"]) == expected_pbp
         assert tuple(pbp["primitive_pair_indices"]) == expected_wp
         assert pbp["parameter_type"] == "M"
-    assert paths_by_subset[(1,)][1]["pbp"]["primitive_pairs"] == [[1, 2]]
+    assert paths_by_subset[(2,)][1]["pbp"]["primitive_pairs"] == [[1, 2]]
 
     so_payload = serialize_calculation(part)
     assert so_payload["group"] == "so"
@@ -493,6 +498,8 @@ def test_http_api() -> None:
         assert "handleGroupChange" in javascript
         assert 'groupKind === "mp"' in javascript
         assert "not an enumeration of every type-M extended PBP" in javascript
+        assert "selected half-row lengths count the -1/2 entries and sum to k" in javascript
+        assert 'const heading = element("h3")' not in javascript
         assert "final-orientation" not in javascript
         assert "pathHistoryPreview(path.realizations)" in javascript
         assert "Path subsets index the rows of the dual orbit from bottom to top." in javascript

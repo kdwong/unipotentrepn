@@ -96,7 +96,7 @@ def assert_complete_calculation(
         assert len(path.final_weight) == rank
         assert all(abs(value) == Fraction(1, 2) for value in path.final_weight)
         assert path.fine_degree == sum(
-            value == Fraction(1, 2) for value in path.final_weight
+            value == Fraction(-1, 2) for value in path.final_weight
         )
         selected_sum = sum(
             (row // 2) * bit
@@ -145,12 +145,19 @@ def test_focused_paths_pbps_and_cycles() -> None:
             check_cycles=True,
         )
 
+    orbit_10 = calculate_metaplectic((10,))
+    paths_10 = {path.subset_label: path for path in orbit_10.paths}
+    assert paths_10["{}"].fine_degree == 0
+    assert paths_10["{}"].final_weight == (Fraction(1, 2),) * 5
+    assert paths_10["{1}"].fine_degree == 5
+    assert paths_10["{1}"].final_weight == (Fraction(-1, 2),) * 5
+
     orbit_42 = calculate_metaplectic((4, 2))
     expected_cycles = {
-        "{}": ((1, ((0, 0), (-1, -2))),),
-        "{1}": ((1, ((0, 0), (1, -2))),),
-        "{2}": ((1, ((0, 0), (2, -1))),),
-        "{1, 2}": ((1, ((0, 0), (2, 1))),),
+        "{}": ((1, ((0, 0), (2, 1))),),
+        "{1}": ((1, ((0, 0), (2, -1))),),
+        "{2}": ((1, ((0, 0), (1, -2))),),
+        "{1, 2}": ((1, ((0, 0), (-1, -2))),),
     }
     assert {
         path.subset_label: path.painted_bipartition.associated_cycle()

@@ -675,8 +675,8 @@ def _serialize_metaplectic_uncached(
                 "label": final_weight_label,
                 "title": "Fine genuine U(n)-type",
                 "degree_description": (
-                    f"The final weight has {degree} entries +1/2 and "
-                    f"{calculation.rank - degree} entries -1/2."
+                    f"The final weight has {calculation.rank - degree} "
+                    f"entries +1/2 and {degree} entries -1/2."
                 ),
                 "concrete_path_count": len(degree_paths),
                 "distinct_pbp_count": len(groups),

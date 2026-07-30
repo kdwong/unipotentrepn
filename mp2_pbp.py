@@ -85,9 +85,9 @@ class MetaplecticFineChain:
 
     @property
     def fine_degree(self) -> int:
-        """Number of ``+1/2`` entries in the final fine Mp weight."""
+        """Number of ``-1/2`` entries in the final fine Mp weight."""
 
-        return sum(value == Fraction(1, 2) for value in self.final_mp_weight)
+        return sum(value == Fraction(-1, 2) for value in self.final_mp_weight)
 
     def display_steps(
         self,
@@ -414,7 +414,7 @@ def metaplectic_histories(
 
 
 def _decode_metaplectic_raw_subset_bits(raw_bits: SubsetBits) -> SubsetBits:
-    """Decode raw pair choices with the type-M boundary ``epsilon=0``."""
+    """Decode the rows contributing ``-1/2`` with type-M boundary ``epsilon=0``."""
 
     row_count = len(raw_bits)
     if not row_count or any(bit not in (0, 1) for bit in raw_bits):
@@ -430,7 +430,11 @@ def _decode_metaplectic_raw_subset_bits(raw_bits: SubsetBits) -> SubsetBits:
         epsilon ^= raw[index] ^ raw[index + 1]
     if row_count % 2:
         subset[1] = raw[1] ^ epsilon
-    return tuple(subset[1:])
+    # VALUE's raw convention records the rows contributing +1/2.  The
+    # metaplectic fine degree is normalized here by the exterior-degree
+    # convention: k counts the -1/2 entries, so the displayed subset is the
+    # complementary set of rows.
+    return tuple(1 - bit for bit in subset[1:])
 
 
 def _raw_pair_from_value_stage(
@@ -449,7 +453,7 @@ def metaplectic_subset_bits(
     chain: MetaplecticFineChain,
     history: TwistHistory,
 ) -> SubsetBits:
-    """Decode one concrete M-ending VALUE history into bottom-up row bits."""
+    """Return bottom-up row bits whose half-row lengths count ``-1/2`` entries."""
 
     part = validate_dual_orbit(partition)
     row_count = len(part)
@@ -499,7 +503,7 @@ def metaplectic_subset_bits(
     )
     if selected_sum != chain.fine_degree:
         raise RuntimeError(
-            "the M subset decoder disagrees with the final number of +1/2 entries"
+            "the M subset decoder disagrees with the final number of -1/2 entries"
         )
     return subset_bits
 

@@ -702,13 +702,7 @@
     const header = element("header", "k-result-header");
     const type = element("div", "k-type-label");
     type.append(element("span", "k-ordinal", `k = ${section.k}`));
-    const heading = element("h3");
-    if (groupKind === "mp") {
-      heading.textContent = section.title || "Fine metaplectic K-type";
-    } else {
-      heading.append(document.createTextNode("1"), element("sup", "", String(section.k)), document.createTextNode(" fine K-type"));
-    }
-    type.append(heading, element("code", "exact-k-label", section.label));
+    type.append(element("code", "exact-k-label", section.label));
 
     const counts = element("p", "k-counts");
     counts.append(
@@ -741,7 +735,7 @@
         "p",
         "multi-pbp-note",
         groupKind === "mp"
-          ? "The 2^r path subsets index the r rows of the dual orbit from bottom to top; the selected half-row lengths sum to k. These are the painted bipartitions reached by the fine-K-type paths, not an enumeration of every type-M extended PBP. The primitive-pair set ℘ uses the separate BMSZ top-to-bottom indexing, and repeated equal rows can make different paths share one painted bipartition."
+          ? "The 2^r path subsets index the r rows of the dual orbit from bottom to top; the selected half-row lengths count the -1/2 entries and sum to k. These are the painted bipartitions reached by the fine-K-type paths, not an enumeration of every type-M extended PBP. The primitive-pair set ℘ uses the separate BMSZ top-to-bottom indexing, and repeated equal rows can make different paths share one painted bipartition."
           : "Path subsets index the rows of the dual orbit from bottom to top.",
       ),
     );
