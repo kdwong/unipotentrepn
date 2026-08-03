@@ -59,17 +59,21 @@ def _relaunch_in_project_venv() -> None:
 _relaunch_in_project_venv()
 
 
+from combunipotent.LS import char_twist_B  # noqa: E402
 from theta2_pbp import (  # noqa: E402 (the venv relaunch must happen first)
+    CHAR_TWISTS,
     ConcreteThetaPath,
     FineKChain,
     PaintedBipartition,
     calculate,
     concrete_history_text,
     concrete_theta_paths,
+    load_pbp_ladder,
     o_wedge_degrees_for_connected_type,
     orbit_pbp_shape,
     orbit_pbp_shapes,
     resolve_final_form,
+    strict_ma_final_local_system,
     theta_subset_bits,
     validate_dual_orbit,
 )
@@ -224,32 +228,39 @@ def _subset_label(indices: tuple[int, ...]) -> str:
     return "{" + ", ".join(map(str, indices)) + "}"
 
 
-def _serialize_associated_cycle_data(
-    reference_drc: tuple[tuple[str, ...], tuple[str, ...]],
-    primitive_pair_indices: Iterable[int],
-    parameter_type: str,
-    cache: dict[Any, Any],
-) -> dict[str, Any]:
-    """Serialize the associated-cycle terms as marked Young diagrams.
+Ils = tuple[tuple[int, int], ...]
+CycleCoefficients = dict[Ils, int]
 
-    The associated-cycle descent is defined on the special reference DRC.
-    The shifted diagram displayed by the painted-bipartition panel is not a
-    valid substitute in this calculation.
-    """
 
-    raw_terms = compute_AC(
-        reference_drc,
-        frozenset(primitive_pair_indices),
-        parameter_type,
-        cache=cache,
-    )
+def _canonical_ils(ils: Iterable[tuple[int, int]]) -> Ils:
+    """Remove trailing zero rows, which do not change a marked diagram."""
 
-    # Iterated theta lifting can reach the same marked diagram through more
-    # than one source term.  Combining those coefficients produces the actual
-    # associated-cycle multiplicity while preserving first-occurrence order.
-    coefficients: dict[tuple[tuple[int, int], ...], int] = {}
+    entries = [(int(p_value), int(q_value)) for p_value, q_value in ils]
+    while entries and entries[-1] == (0, 0):
+        entries.pop()
+    return tuple(entries)
+
+
+def _associated_cycle_coefficients(
+    raw_terms: Iterable[tuple[int, Iterable[tuple[int, int]]]],
+) -> CycleCoefficients:
+    """Combine equal marked diagrams in first-occurrence order."""
+
+    coefficients: CycleCoefficients = {}
     for coefficient, ils in raw_terms:
-        coefficients[ils] = coefficients.get(ils, 0) + int(coefficient)
+        canonical = _canonical_ils(ils)
+        coefficients[canonical] = coefficients.get(canonical, 0) + int(
+            coefficient
+        )
+        if coefficients[canonical] == 0:
+            del coefficients[canonical]
+    return coefficients
+
+
+def _serialize_cycle_coefficients(
+    coefficients: CycleCoefficients,
+) -> dict[str, Any]:
+    """Serialize consolidated marked associated-cycle components."""
 
     terms = []
     for ils, coefficient in coefficients.items():
@@ -279,19 +290,90 @@ def _serialize_associated_cycle_data(
     }
 
 
-def _serialize_associated_cycle(
-    pbp: PaintedBipartition,
+def _diagonal_twist_cycle(
+    coefficients: CycleCoefficients,
+) -> CycleCoefficients:
+    """Twist every type-B marked diagram by the global ``(1,1)`` character."""
+
+    twisted_terms = []
+    for ils, coefficient in coefficients.items():
+        twisted_local_system = char_twist_B((ils,), CHAR_TWISTS["dd"])
+        if len(twisted_local_system) != 1:
+            raise RuntimeError("a diagonal twist changed the component count")
+        twisted_ils = next(iter(twisted_local_system))
+        twisted_terms.append((coefficient, twisted_ils))
+    return _associated_cycle_coefficients(twisted_terms)
+
+
+def _path_cycle_relation(
+    path_coefficients: CycleCoefficients,
+    reference_coefficients: CycleCoefficients,
+    outer_det_twist: bool,
+) -> str:
+    """Verify and label the exact O-extension relative to its SO reference."""
+
+    expected_coefficients = (
+        _diagonal_twist_cycle(reference_coefficients)
+        if outer_det_twist
+        else reference_coefficients
+    )
+    if path_coefficients != expected_coefficients:
+        expected_relation = (
+            "its diagonal (1,1) twist"
+            if outer_det_twist
+            else "the untwisted reference"
+        )
+        raise RuntimeError(
+            "an exact O-path associated cycle does not equal "
+            f"{expected_relation} of its painted-bipartition cycle"
+        )
+    # Use the O-extension label even if a marked cycle happens to be fixed by
+    # the diagonal twist, since equality alone cannot distinguish that case.
+    return "tensor_1_1" if outer_det_twist else "same"
+
+
+def _serialize_associated_cycle_data(
+    reference_drc: tuple[tuple[str, ...], tuple[str, ...]],
+    primitive_pair_indices: Iterable[int],
+    parameter_type: str,
     cache: dict[Any, Any],
 ) -> dict[str, Any]:
-    """Serialize the associated cycle of a type-B parameter."""
+    """Serialize the associated-cycle terms as marked Young diagrams.
+
+    The associated-cycle descent is defined on the special reference DRC.
+    The shifted diagram displayed by the painted-bipartition panel is not a
+    valid substitute in this calculation.
+    """
+
+    raw_terms = compute_AC(
+        reference_drc,
+        frozenset(primitive_pair_indices),
+        parameter_type,
+        cache=cache,
+    )
+
+    # Iterated theta lifting can reach the same marked diagram through more
+    # than one source term.  Combining those coefficients produces the actual
+    # associated-cycle multiplicity while preserving first-occurrence order.
+    return _serialize_cycle_coefficients(
+        _associated_cycle_coefficients(raw_terms)
+    )
+
+
+def _painted_bipartition_cycle_coefficients(
+    pbp: PaintedBipartition,
+    cache: dict[Any, Any],
+) -> CycleCoefficients:
+    """Compute the SO-normalized cycle attached to one painted bipartition."""
 
     reference_drc = pbp.special_reference_extended_drc or pbp.extended_drc
-    return _serialize_associated_cycle_data(
+    raw_terms = compute_AC(
         reference_drc,
-        pbp.primitive_pair_indices,
+        frozenset(pbp.primitive_pair_indices),
         pbp.gamma,
-        cache,
+        cache=cache,
     )
+    return _associated_cycle_coefficients(raw_terms)
 
 
 def _serialize_group_path(
@@ -300,8 +382,10 @@ def _serialize_group_path(
     path_number: int,
     k: int,
     pbp: PaintedBipartition,
+    zero_local_system: Any,
+    reference_cycle: CycleCoefficients,
 ) -> dict[str, Any]:
-    """Serialize one concrete path with its orbit-row subset parameter."""
+    """Serialize one path and its exact O-extension associated cycle."""
 
     history = path.history
     subset_bits = theta_subset_bits(part, path.chain, history)
@@ -310,11 +394,36 @@ def _serialize_group_path(
     )
     subset_label = _subset_label(subset_indices)
     subset_slug = "-".join(map(str, subset_indices)) or "empty"
+    exact_local_system = strict_ma_final_local_system(
+        zero_local_system,
+        path.chain,
+        history,
+    )
+    exact_cycle = _associated_cycle_coefficients(
+        (1, ils) for ils in exact_local_system
+    )
+    cycle_relation = _path_cycle_relation(
+        exact_cycle,
+        reference_cycle,
+        pbp.outer_det_twist,
+    )
     concrete_realizations = [
         {
             "twist_history": list(history),
             "twist_history_text": concrete_history_text(history, path.chain),
             "steps": _chain_steps(path.chain, history),
+            "exact_associated_cycle": _serialize_cycle_coefficients(
+                exact_cycle
+            ),
+            "pbp_cycle_relation": cycle_relation,
+            "pbp_cycle_twist": (
+                [0, 0] if cycle_relation == "same" else [1, 1]
+            ),
+            "pbp_cycle_relation_label": (
+                "same as painted-bipartition reference"
+                if cycle_relation == "same"
+                else "painted-bipartition reference twisted by (1,1)"
+            ),
         }
     ]
     preview_steps = concrete_realizations[0]["steps"]
@@ -454,6 +563,8 @@ def _serialize_so_uncached(
 
     final_form = resolve_final_form(sum(part) + 1)
     part, totals, _chains_by_label, results_by_label = calculate(part)
+    ladder = load_pbp_ladder(part, totals)
+    _zero_drc, zero_local_system = next(iter(ladder.drc_stages[0].items()))
     associated_cycle_cache: dict[Any, Any] = {}
 
     n = sum(part) // 2
@@ -509,8 +620,20 @@ def _serialize_so_uncached(
                 ),
             )
             pbp = occurrences[0][2]
+            reference_cycle = _painted_bipartition_cycle_coefficients(
+                pbp,
+                associated_cycle_cache,
+            )
             paths = [
-                _serialize_group_path(part, path, path_number, k, parameter)
+                _serialize_group_path(
+                    part,
+                    path,
+                    path_number,
+                    k,
+                    parameter,
+                    zero_local_system,
+                    reference_cycle,
+                )
                 for path_number, path, parameter in occurrences
             ]
             reached_extensions = sorted(
@@ -521,9 +644,8 @@ def _serialize_so_uncached(
                     "id": f"k{k}-pbp-{group_number}",
                     "number": group_number,
                     "pbp": _serialize_pbp(pbp),
-                    "associated_cycle": _serialize_associated_cycle(
-                        pbp,
-                        associated_cycle_cache,
+                    "associated_cycle": _serialize_cycle_coefficients(
+                        reference_cycle
                     ),
                     "path_count": len({path_number for path_number, _, _ in occurrences}),
                     "path_occurrence_count": len(paths),
