@@ -1218,6 +1218,14 @@ h1 em {
   font-style: italic;
 }
 
+.cycle-reference-note {
+  margin: -5px 0 13px;
+  color: var(--ink-soft);
+  font-family: var(--serif);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 .paths-block {
   padding: 20px 24px 24px;
   border-top: 1px solid var(--line);
@@ -1333,6 +1341,29 @@ h1 em {
   text-transform: uppercase;
 }
 
+.path-cycle-status {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 8px;
+  font-weight: 760;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.path-cycle-status-same {
+  color: var(--teal);
+  background: var(--teal-light);
+  border-color: #bdd0ca;
+}
+
+.path-cycle-status-twisted {
+  color: var(--cinnabar);
+  background: var(--cinnabar-light);
+  border-color: #dec2b9;
+}
+
 .path-chevron {
   width: 8px;
   height: 8px;
@@ -1370,6 +1401,72 @@ h1 em {
 
 .twist-histories {
   margin-bottom: 18px;
+}
+
+.path-associated-cycle {
+  margin: 0 0 18px;
+  padding: 14px;
+  background: linear-gradient(145deg, #f3f7f5, #faf6ef 72%);
+  border: 1px solid #cbd8d4;
+  border-radius: 7px;
+}
+
+.path-cycle-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.path-cycle-heading h6 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.path-cycle-relation {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 8px;
+  font-weight: 760;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.path-cycle-relation-same {
+  color: var(--teal);
+  background: rgb(255 255 255 / 66%);
+  border-color: #bdd0ca;
+}
+
+.path-cycle-relation-twisted {
+  color: var(--cinnabar);
+  background: var(--cinnabar-light);
+  border-color: #dec2b9;
+}
+
+.path-cycle-explanation {
+  margin: 8px 0 10px;
+  color: var(--ink-soft);
+  font-family: var(--serif);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.path-cycle-render > .cycle-count {
+  display: inline-block;
+  margin-bottom: 8px;
+}
+
+.path-associated-cycle .associated-cycle-terms {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.path-associated-cycle .cycle-term {
+  background: rgb(255 253 248 / 94%);
 }
 
 .content-label {

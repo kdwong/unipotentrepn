@@ -1,4 +1,4 @@
-"""Bounded audit of associated-cycle independence from the theta path.
+"""Bounded audit of exact O-path and SO-normalized associated cycles.
 
 For every concrete theta history, this test compares two independent
 computations:
@@ -7,9 +7,11 @@ computations:
 2. compute the associated cycle recursively from the resulting extended
    painted bipartition.
 
-The path-side result is restricted from the reached ``O(p,q)`` extension to
-the fixed ``SO(p,q)`` parameter before comparison.  Thus an outer determinant
-twist is undone; it is not part of the painted bipartition.
+The strict path result first retains the reached ``O(p,q)`` extension.  It
+must equal either the painted-bipartition reference cycle or, when the reached
+outer extension is nontrivial, that cycle twisted by ``(1,1)``.  Only then is
+the diagonal twist undone to check path independence after restriction to the
+fixed ``SO(p,q)`` parameter.
 """
 
 from __future__ import annotations
@@ -110,20 +112,27 @@ def path_cycle(
     zero_local_system,
     chain,
     history,
-    outer_det_twist: bool,
 ) -> FrozenMultiset:
-    """Replay one path and restrict its reached O-extension to SO."""
+    """Replay one path while retaining its exact O-extension."""
 
     local_system = strict_ma_final_local_system(
         zero_local_system,
         chain,
         history,
     )
-    if outer_det_twist:
-        # The determinant character is involutive.  Removing it compares the
-        # two O-extensions at their common SO painted-bipartition parameter.
-        local_system = char_twist_B(local_system, CHAR_TWISTS["dd"])
     return canonical_local_system(local_system)
+
+
+def diagonal_twist_cycle(local_system: Iterable) -> FrozenMultiset:
+    """Twist components individually so repeated multiplicities survive."""
+
+    terms = []
+    for ils in local_system:
+        twisted = char_twist_B((ils,), CHAR_TWISTS["dd"])
+        if len(twisted) != 1:
+            raise AssertionError("diagonal twist changed the component count")
+        terms.append(canonical_ils(next(iter(twisted))))
+    return FrozenMultiset(terms)
 
 
 def audit_orbit(
@@ -147,23 +156,50 @@ def audit_orbit(
                     associated_cycle_cache,
                 )
                 for history in histories:
-                    computed_path_cycle = path_cycle(
+                    exact_path_cycle = path_cycle(
                         zero_local_system,
                         result.chain,
                         history,
-                        pbp.outer_det_twist,
+                    )
+                    expected_exact_cycle = (
+                        diagonal_twist_cycle(pbp_cycle)
+                        if pbp.outer_det_twist
+                        else pbp_cycle
                     )
                     statistics["path_pbp_occurrences"] += 1
-                    paths_by_so_parameter[pbp.so_parameter_key].append(
-                        computed_path_cycle
-                    )
-                    if computed_path_cycle != pbp_cycle:
+                    statistics[
+                        "tensor_1_1_paths"
+                        if pbp.outer_det_twist
+                        else "same_paths"
+                    ] += 1
+                    if exact_path_cycle != expected_exact_cycle:
                         raise AssertionError(
-                            "Path/PBP associated-cycle mismatch: "
+                            "Exact O-path associated-cycle mismatch: "
                             f"O^vee={partition}, K-type={label}, "
                             f"history={history}, outer_det={pbp.outer_det_twist}, "
                             f"PBP={pbp.painted_one_line()}, "
-                            f"path={marked_diagram_text(computed_path_cycle)}, "
+                            f"exact path={marked_diagram_text(exact_path_cycle)}, "
+                            "expected="
+                            f"{marked_diagram_text(expected_exact_cycle)}"
+                        )
+
+                    # The determinant character is involutive.  Removing it
+                    # compares both O-extensions at their common SO parameter.
+                    computed_so_cycle = (
+                        diagonal_twist_cycle(exact_path_cycle)
+                        if pbp.outer_det_twist
+                        else exact_path_cycle
+                    )
+                    paths_by_so_parameter[pbp.so_parameter_key].append(
+                        computed_so_cycle
+                    )
+                    if computed_so_cycle != pbp_cycle:
+                        raise AssertionError(
+                            "SO-normalized path/PBP associated-cycle mismatch: "
+                            f"O^vee={partition}, K-type={label}, "
+                            f"history={history}, outer_det={pbp.outer_det_twist}, "
+                            f"PBP={pbp.painted_one_line()}, "
+                            f"path={marked_diagram_text(computed_so_cycle)}, "
                             f"PBP descent={marked_diagram_text(pbp_cycle)}"
                         )
 
@@ -200,6 +236,8 @@ def run_audit(max_total: int) -> dict[str, int | float]:
 
     totals["elapsed_seconds"] = time.perf_counter() - started
     assert totals["multi_path_groups"] > 0
+    assert totals["same_paths"] > 0
+    assert totals["tensor_1_1_paths"] > 0
     return dict(totals)
 
 
@@ -222,7 +260,9 @@ def main() -> None:
         f"{statistics['so_pbp_groups']} SO painted-bipartition groups"
     )
     print(
-        f"all {statistics['path_pbp_occurrences']} path/PBP occurrences agree; "
+        f"all {statistics['path_pbp_occurrences']} path/PBP occurrences agree: "
+        f"{statistics['same_paths']} exact cycles are displayed as-is and "
+        f"{statistics['tensor_1_1_paths']} require tensor (1,1); "
         f"{statistics['multi_path_groups']} multi-path groups contain "
         f"{statistics['multi_path_occurrences']} occurrences"
     )

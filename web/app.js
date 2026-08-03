@@ -603,7 +603,33 @@
         const steps = Array.isArray(rawSteps)
           ? rawSteps.map(String)
           : splitChain(String(rawSteps || ""));
-        return { history, historyText, steps };
+        const exactCycleSource =
+          realization?.exact_associated_cycle
+          ?? realization?.exactAssociatedCycle
+          ?? null;
+        return {
+          history,
+          historyText,
+          steps,
+          exactAssociatedCycle: exactCycleSource
+            ? normalizeAssociatedCycle(exactCycleSource)
+            : null,
+          pbpCycleRelation: String(
+            realization?.pbp_cycle_relation
+            ?? realization?.pbpCycleRelation
+            ?? "",
+          ),
+          pbpCycleTwist: toNumberArray(
+            realization?.pbp_cycle_twist
+            ?? realization?.pbpCycleTwist
+            ?? [],
+          ),
+          pbpCycleRelationLabel: String(
+            realization?.pbp_cycle_relation_label
+            ?? realization?.pbpCycleRelationLabel
+            ?? "",
+          ),
+        };
       });
     }
     if (fallbackHistories.length) {
@@ -611,9 +637,21 @@
         history,
         historyText: history.join(" → "),
         steps: fallbackSteps,
+        exactAssociatedCycle: null,
+        pbpCycleRelation: "",
+        pbpCycleTwist: [],
+        pbpCycleRelationLabel: "",
       }));
     }
-    return [{ history: [], historyText: "", steps: fallbackSteps }];
+    return [{
+      history: [],
+      historyText: "",
+      steps: fallbackSteps,
+      exactAssociatedCycle: null,
+      pbpCycleRelation: "",
+      pbpCycleTwist: [],
+      pbpCycleRelationLabel: "",
+    }];
   }
 
   function splitChain(value) {
@@ -742,7 +780,7 @@
         "multi-pbp-note",
         groupKind === "mp"
           ? "The 2^r path subsets index the r rows of the dual orbit from bottom to top; the selected half-row lengths count the -1/2 entries and sum to k. These are the painted bipartitions reached by the fine-K-type paths, not an enumeration of every type-M extended PBP. The primitive-pair set ℘ uses the separate BMSZ top-to-bottom indexing, and repeated equal rows can make different paths share one painted bipartition."
-          : "Path subsets index the rows of the dual orbit from bottom to top.",
+          : "Path subsets index the rows of the dual orbit from bottom to top. The cycle shown with each painted bipartition is the canonical PBP reference; every expanded path shows the exact O(p,q)-extension cycle and whether it is unchanged or twisted by ⊗ (1,1).",
       ),
     );
 
@@ -796,8 +834,26 @@
 
     renderTableau(fragment.querySelector(".tableau-p"), group.pbp.p, "P");
     renderTableau(fragment.querySelector(".tableau-q"), group.pbp.q, "Q");
+    const cyclePanel = fragment.querySelector(".associated-cycle-panel");
+    if (groupKind === "so") {
+      cyclePanel.setAttribute(
+        "aria-label",
+        "Painted-bipartition reference associated cycle",
+      );
+      cyclePanel.querySelector(".cycle-kicker").textContent =
+        "Painted-bipartition cycle";
+      cyclePanel.querySelector(".associated-cycle-heading h5").textContent =
+        "Canonical marked diagrams";
+      cyclePanel.querySelector(".associated-cycle-heading").after(
+        element(
+          "p",
+          "cycle-reference-note",
+          "Each exact O(p,q)-path cycle below is checked against this reference and is labelled either as displayed or ⊗ (1,1).",
+        ),
+      );
+    }
     renderAssociatedCycle(
-      fragment.querySelector(".associated-cycle-panel"),
+      cyclePanel,
       group.associatedCycle,
     );
 
@@ -956,6 +1012,22 @@
     if (groupKind === "so" && path.outerEpsilon) {
       summary.append(element("span", "history-count", `outer ε · ${path.outerEpsilon}`));
     }
+    const cycleRelation = path.realizations.find(
+      (realization) => realization.pbpCycleRelation,
+    )?.pbpCycleRelation;
+    if (groupKind === "so" && cycleRelation) {
+      const relationClass = cycleRelation === "tensor_1_1" ? "twisted" : "same";
+      const relationText = cycleRelation === "tensor_1_1"
+        ? "marked cycle · ⊗ (1,1)"
+        : "marked cycle · as displayed";
+      summary.append(
+        element(
+          "span",
+          `path-cycle-status path-cycle-status-${relationClass}`,
+          relationText,
+        ),
+      );
+    }
     summary.append(
       element("span", "history-count", `${historyCount || 1} twist histor${historyCount === 1 ? "y" : "ies"}`),
       element("span", "path-chevron"),
@@ -980,6 +1052,10 @@
       histories.append(historyList);
       realizationBlock.append(histories);
 
+      if (groupKind === "so" && realization.exactAssociatedCycle) {
+        realizationBlock.append(renderPathAssociatedCycle(realization));
+      }
+
       realizationBlock.append(element("span", "content-label", "Theta-lift chain"));
       const timeline = element("ol", "chain-timeline");
       if (realization.steps.length) {
@@ -992,6 +1068,46 @@
     });
     details.append(content);
     return details;
+  }
+
+  function renderPathAssociatedCycle(realization) {
+    const panel = element("section", "path-associated-cycle");
+    panel.setAttribute("aria-label", "Exact O-path associated cycle");
+
+    const heading = element("header", "path-cycle-heading");
+    const title = element("div");
+    title.append(
+      element("span", "cycle-kicker", "Exact O-path cycle"),
+      element("h6", "", "Marked diagrams for this realization"),
+    );
+    const isTwisted = realization.pbpCycleRelation === "tensor_1_1";
+    heading.append(
+      title,
+      element(
+        "span",
+        `path-cycle-relation path-cycle-relation-${isTwisted ? "twisted" : "same"}`,
+        isTwisted ? "reference ⊗ (1,1)" : "same as reference",
+      ),
+    );
+    panel.append(heading);
+    panel.append(
+      element(
+        "p",
+        "path-cycle-explanation",
+        isTwisted
+          ? "This exact path reaches the painted-bipartition cycle above twisted by ⊗ (1,1)."
+          : "This exact path reaches the painted-bipartition cycle displayed above.",
+      ),
+    );
+
+    const cycle = element("div", "path-cycle-render");
+    cycle.append(
+      element("span", "cycle-count"),
+      element("div", "associated-cycle-terms"),
+    );
+    panel.append(cycle);
+    renderAssociatedCycle(cycle, realization.exactAssociatedCycle);
+    return panel;
   }
 
   function updateToggleLabel(button, details) {
