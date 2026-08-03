@@ -7,10 +7,14 @@ import json
 import os
 import sys
 import threading
+from collections import defaultdict
+from collections.abc import Iterator
 
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from combunipotent.LS import char_twist_B  # noqa: E402
+from theta2_pbp import CHAR_TWISTS  # noqa: E402
 from theta2_pbp_web import (  # noqa: E402
     CALCULATION_CACHE,
     RequestError,
@@ -20,6 +24,73 @@ from theta2_pbp_web import (  # noqa: E402
     parse_request_body,
     serialize_calculation,
 )
+
+
+def partitions(
+    total: int,
+    maximum: int | None = None,
+) -> Iterator[tuple[int, ...]]:
+    """Generate decreasing positive integer partitions of ``total``."""
+
+    if total == 0:
+        yield ()
+        return
+    if maximum is None:
+        maximum = total
+    for first in range(min(total, maximum), 0, -1):
+        for rest in partitions(total - first, first):
+            yield (first, *rest)
+
+
+def all_even_partitions(max_total: int) -> Iterator[tuple[int, ...]]:
+    """Generate every nonempty all-even partition through ``max_total``."""
+
+    for half_total in range(1, max_total // 2 + 1):
+        for half_partition in partitions(half_total):
+            yield tuple(2 * row for row in half_partition)
+
+
+def serialized_cycle_coefficients(
+    cycle: dict,
+) -> dict[tuple[tuple[int, int], ...], int]:
+    """Recover canonical ILS coefficients from one serialized cycle."""
+
+    coefficients = {}
+    for term in cycle["terms"]:
+        entries = term["ils_entries"]
+        maximum_row = max(
+            (int(entry["row_length"]) for entry in entries),
+            default=0,
+        )
+        ils = [(0, 0)] * maximum_row
+        for entry in entries:
+            ils[int(entry["row_length"]) - 1] = (
+                int(entry["p"]),
+                int(entry["q"]),
+            )
+        canonical = tuple(ils)
+        coefficients[canonical] = coefficients.get(canonical, 0) + int(
+            term["coefficient"]
+        )
+    return coefficients
+
+
+def diagonal_twist_coefficients(
+    coefficients: dict[tuple[tuple[int, int], ...], int],
+) -> dict[tuple[tuple[int, int], ...], int]:
+    """Twist serialized components individually, retaining multiplicities."""
+
+    twisted_coefficients = {}
+    for ils, coefficient in coefficients.items():
+        twisted = char_twist_B((ils,), CHAR_TWISTS["dd"])
+        assert len(twisted) == 1
+        twisted_ils = tuple(next(iter(twisted)))
+        while twisted_ils and twisted_ils[-1] == (0, 0):
+            twisted_ils = twisted_ils[:-1]
+        twisted_coefficients[twisted_ils] = (
+            twisted_coefficients.get(twisted_ils, 0) + coefficient
+        )
+    return twisted_coefficients
 
 
 def test_orbit_parser() -> None:
@@ -272,6 +343,110 @@ def test_explicit_paths_grouping_fixed_form_and_cache() -> None:
     )
 
 
+def test_exact_path_cycle_relation_for_444() -> None:
+    """Keep the reported Path {1} O-extension mismatch visible."""
+
+    CALCULATION_CACHE.clear()
+    payload = serialize_calculation((4, 4, 4))
+    k2 = next(section for section in payload["results"] if section["k"] == 2)
+    occurrences = [
+        (group, path, path["concrete_realizations"][0])
+        for group in k2["groups"]
+        for path in group["paths"]
+        if path["subset_indices"] == [1]
+    ]
+    assert len(occurrences) == 1
+    group, path, realization = occurrences[0]
+
+    reference = {((0, -1), (0, 0), (-2, 2)): 1}
+    exact = {((0, 1), (0, 0), (2, -2)): 1}
+    assert realization["twist_history"] == ["dt", "tt"]
+    assert realization["twist_history_text"] == (
+        "O(2,3) dt -> O(6,7) tt"
+    )
+    assert path["outer_epsilon"] is True
+    assert realization["pbp_cycle_relation"] == "tensor_1_1"
+    assert realization["pbp_cycle_twist"] == [1, 1]
+    assert serialized_cycle_coefficients(group["associated_cycle"]) == reference
+    assert serialized_cycle_coefficients(
+        realization["exact_associated_cycle"]
+    ) == exact
+    assert diagonal_twist_coefficients(reference) == exact
+    assert group["associated_cycle"]["terms"][0]["marked_rows"] == [
+        "-+-",
+        "-+-",
+        "*=*",
+        "*=*",
+        "=",
+    ]
+    assert realization["exact_associated_cycle"]["terms"][0][
+        "marked_rows"
+    ] == ["=*=", "=*=", "+-+", "+-+", "-"]
+
+    k0 = next(section for section in payload["results"] if section["k"] == 0)
+    same_group, same_path = next(
+        (candidate_group, candidate_path)
+        for candidate_group in k0["groups"]
+        for candidate_path in candidate_group["paths"]
+        if candidate_path["subset_indices"] == []
+    )
+    same_realization = same_path["concrete_realizations"][0]
+    assert same_path["outer_epsilon"] is False
+    assert same_realization["pbp_cycle_relation"] == "same"
+    assert same_realization["pbp_cycle_twist"] == [0, 0]
+    assert serialized_cycle_coefficients(
+        same_realization["exact_associated_cycle"]
+    ) == serialized_cycle_coefficients(same_group["associated_cycle"])
+
+
+def test_every_serialized_so_path_has_exact_cycle_relation() -> None:
+    """Audit the complete web schema for all even orbits through size 16."""
+
+    CALCULATION_CACHE.clear()
+    statistics = defaultdict(int)
+    for orbit in all_even_partitions(16):
+        statistics["partitions"] += 1
+        payload = serialize_calculation(orbit)
+        statistics["fine_k_bins"] += len(payload["results"])
+        for section in payload["results"]:
+            statistics["so_pbp_groups"] += len(section["groups"])
+            for group in section["groups"]:
+                reference = serialized_cycle_coefficients(
+                    group["associated_cycle"]
+                )
+                for path in group["paths"]:
+                    statistics["path_pbp_occurrences"] += 1
+                    assert len(path["concrete_realizations"]) == 1
+                    realization = path["concrete_realizations"][0]
+                    exact = serialized_cycle_coefficients(
+                        realization["exact_associated_cycle"]
+                    )
+                    relation = realization["pbp_cycle_relation"]
+                    expected_relation = (
+                        "tensor_1_1" if path["outer_epsilon"] else "same"
+                    )
+                    assert relation == expected_relation
+                    statistics[relation] += 1
+
+                    if relation == "same":
+                        assert realization["pbp_cycle_twist"] == [0, 0]
+                        expected = reference
+                    else:
+                        assert realization["pbp_cycle_twist"] == [1, 1]
+                        expected = diagonal_twist_coefficients(reference)
+                    assert exact == expected
+
+    assert dict(statistics) == {
+        "partitions": 66,
+        "fine_k_bins": 261,
+        "so_pbp_groups": 433,
+        "path_pbp_occurrences": 1392,
+        "same": 380,
+        "tensor_1_1": 1012,
+    }
+    CALCULATION_CACHE.clear()
+
+
 def test_metaplectic_serialization_and_group_cache() -> None:
     CALCULATION_CACHE.clear()
     part = (4, 2)
@@ -506,6 +681,12 @@ def test_http_api() -> None:
         assert "pathHistoryPreview(path.realizations)" in javascript
         assert "Path subsets index the rows of the dual orbit from bottom to top." in javascript
         assert "renderAssociatedCycle" in javascript
+        assert "renderPathAssociatedCycle" in javascript
+        assert "Exact O-path cycle" in javascript
+        assert "Canonical marked diagrams" in javascript
+        assert "SO reference marked diagrams" not in javascript
+        assert "pbpCycleRelation" in javascript
+        assert "marked cycle · ⊗ (1,1)" in javascript
         assert "path.subsetLabel" in javascript
         assert 'element("div", "marked-diagram")' in javascript
         assert "marked-diagram-cell" in javascript
@@ -517,6 +698,8 @@ def test_http_api() -> None:
         assert response.status == 200
         assert ".marked-diagram-cell {" in stylesheet
         assert ".marked-diagram-row + .marked-diagram-row" in stylesheet
+        assert ".path-associated-cycle {" in stylesheet
+        assert ".path-cycle-status-twisted {" in stylesheet
         assert "grid-template-columns: minmax(0, 1.35fr)" not in stylesheet
         connection.close()
     finally:
@@ -530,6 +713,8 @@ def main() -> None:
         test_orbit_parser,
         test_group_and_request_parser,
         test_explicit_paths_grouping_fixed_form_and_cache,
+        test_exact_path_cycle_relation_for_444,
+        test_every_serialized_so_path_has_exact_cycle_relation,
         test_metaplectic_serialization_and_group_cache,
         test_http_api,
     )
