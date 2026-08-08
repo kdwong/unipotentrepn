@@ -198,10 +198,28 @@ class MetaplecticConcretePath:
     painted_bipartition: MetaplecticPaintedBipartition
 
     @property
-    def subset_indices(self) -> tuple[int, ...]:
+    def selected_subset_indices(self) -> tuple[int, ...]:
+        """Return the computational row subset selected by this path."""
+
         return tuple(
             index
             for index, bit in enumerate(self.subset_bits, start=1)
+            if bit
+        )
+
+    @property
+    def label_subset_bits(self) -> SubsetBits:
+        """Return the complementary subset bits used in the path label."""
+
+        return tuple(1 - bit for bit in self.subset_bits)
+
+    @property
+    def subset_indices(self) -> tuple[int, ...]:
+        """Return the complementary row subset used in the path label."""
+
+        return tuple(
+            index
+            for index, bit in enumerate(self.label_subset_bits, start=1)
             if bit
         )
 

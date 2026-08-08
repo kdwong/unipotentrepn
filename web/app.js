@@ -779,7 +779,7 @@
         "p",
         "multi-pbp-note",
         groupKind === "mp"
-          ? "The 2^r path subsets index the r rows of the dual orbit from bottom to top; the selected half-row lengths count the -1/2 entries and sum to k. These are the painted bipartitions reached by the fine-K-type paths, not an enumeration of every type-M extended PBP. The primitive-pair set ℘ uses the separate BMSZ top-to-bottom indexing, and repeated equal rows can make different paths share one painted bipartition."
+          ? "The 2^r path labels use the complements of the computational row subsets, with the r rows of the dual orbit numbered from bottom to top. Thus the rows omitted from a label are the selected half-row lengths that count the -1/2 entries and sum to k. These are the painted bipartitions reached by the fine-K-type paths, not an enumeration of every type-M extended PBP. The primitive-pair set ℘ uses the separate BMSZ top-to-bottom indexing, and repeated equal rows can make different paths share one painted bipartition."
           : "Path subsets index the rows of the dual orbit from bottom to top. The cycle shown with each painted bipartition is the canonical PBP reference; every expanded path shows the exact O(p,q)-extension cycle and whether it is unchanged or twisted by ⊗ (1,1).",
       ),
     );
