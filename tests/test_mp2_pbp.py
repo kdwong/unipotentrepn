@@ -49,8 +49,10 @@ def all_even_partitions(max_total: int) -> Iterator[tuple[int, ...]]:
             yield tuple(2 * row for row in half_partition)
 
 
-def subset_label(bits: tuple[int, ...]) -> str:
-    indices = [str(index) for index, bit in enumerate(bits, start=1) if bit]
+def complementary_subset_label(bits: tuple[int, ...]) -> str:
+    """Return the label obtained by complementing computational bits."""
+
+    indices = [str(index) for index, bit in enumerate(bits, start=1) if not bit]
     return "{" + ", ".join(indices) + "}"
 
 
@@ -86,7 +88,13 @@ def assert_complete_calculation(
     associated_cycle_cache = {}
     checked_cycles = set()
     for path in calculation.paths:
-        assert path.subset_label == subset_label(path.subset_bits)
+        assert path.label_subset_bits == tuple(1 - bit for bit in path.subset_bits)
+        assert path.selected_subset_indices == tuple(
+            index
+            for index, bit in enumerate(path.subset_bits, start=1)
+            if bit
+        )
+        assert path.subset_label == complementary_subset_label(path.subset_bits)
         assert path.name == f"Path {path.subset_label}"
         assert len(path.history) == (row_count + 1) // 2
         assert len(path.display_steps) >= 2 * len(path.history)
@@ -147,17 +155,22 @@ def test_focused_paths_pbps_and_cycles() -> None:
 
     orbit_10 = calculate_metaplectic((10,))
     paths_10 = {path.subset_label: path for path in orbit_10.paths}
-    assert paths_10["{}"].fine_degree == 0
-    assert paths_10["{}"].final_weight == (Fraction(1, 2),) * 5
-    assert paths_10["{1}"].fine_degree == 5
-    assert paths_10["{1}"].final_weight == (Fraction(-1, 2),) * 5
+    assert paths_10["{1}"].fine_degree == 0
+    assert paths_10["{1}"].final_weight == (Fraction(1, 2),) * 5
+    assert paths_10["{}"].fine_degree == 5
+    assert paths_10["{}"].final_weight == (Fraction(-1, 2),) * 5
+
+    orbit_642 = calculate_metaplectic((6, 4, 2))
+    paths_642 = {path.selected_subset_indices: path for path in orbit_642.paths}
+    assert paths_642[(1,)].name == "Path {2, 3}"
+    assert paths_642[(1, 3)].name == "Path {2}"
 
     orbit_42 = calculate_metaplectic((4, 2))
     expected_cycles = {
-        "{}": ((1, ((0, 0), (2, 1))),),
-        "{1}": ((1, ((0, 0), (2, -1))),),
-        "{2}": ((1, ((0, 0), (1, -2))),),
-        "{1, 2}": ((1, ((0, 0), (-1, -2))),),
+        "{1, 2}": ((1, ((0, 0), (2, 1))),),
+        "{2}": ((1, ((0, 0), (2, -1))),),
+        "{1}": ((1, ((0, 0), (1, -2))),),
+        "{}": ((1, ((0, 0), (-1, -2))),),
     }
     assert {
         path.subset_label: path.painted_bipartition.associated_cycle()
