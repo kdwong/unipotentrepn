@@ -491,23 +491,23 @@ def test_metaplectic_serialization_and_group_cache() -> None:
     assert set(paths_by_subset) == {(), (1,), (2,), (1, 2)}
     expected = {
         (): (
-            ("1/2", "1/2", "1/2"),
-            (["ss"], ["d"]),
+            ("-1/2", "-1/2", "-1/2"),
+            (["sc"], ["d"]),
             (),
         ),
         (1,): (
-            ("1/2", "1/2", "-1/2"),
-            (["sc"], ["r"]),
-            (),
-        ),
-        (2,): (
             ("1/2", "-1/2", "-1/2"),
             (["*"], ["*r"]),
             (0,),
         ),
+        (2,): (
+            ("1/2", "1/2", "-1/2"),
+            (["sc"], ["r"]),
+            (),
+        ),
         (1, 2): (
-            ("-1/2", "-1/2", "-1/2"),
-            (["sc"], ["d"]),
+            ("1/2", "1/2", "1/2"),
+            (["ss"], ["d"]),
             (),
         ),
     }
@@ -520,7 +520,23 @@ def test_metaplectic_serialization_and_group_cache() -> None:
         assert (pbp["p"], pbp["q"]) == expected_pbp
         assert tuple(pbp["primitive_pair_indices"]) == expected_wp
         assert pbp["parameter_type"] == "M"
-    assert paths_by_subset[(2,)][1]["pbp"]["primitive_pairs"] == [[1, 2]]
+    assert paths_by_subset[(1,)][1]["pbp"]["primitive_pairs"] == [[1, 2]]
+
+    payload_642 = serialize_calculation((6, 4, 2), group="mp")
+    paths_642 = {
+        tuple(path["selected_subset_indices"]): path
+        for section in payload_642["results"]
+        for group in section["groups"]
+        for path in group["paths"]
+    }
+    assert paths_642[(1,)]["name"] == "Path {2, 3}"
+    assert paths_642[(1,)]["subset_indices"] == [2, 3]
+    assert paths_642[(1, 3)]["name"] == "Path {2}"
+    assert paths_642[(1, 3)]["subset_indices"] == [2]
+    for path in paths_642.values():
+        assert path["subset_bits"] == [
+            1 - bit for bit in path["selected_subset_bits"]
+        ]
 
     so_payload = serialize_calculation(part)
     assert so_payload["group"] == "so"
@@ -675,7 +691,8 @@ def test_http_api() -> None:
         assert "handleGroupChange" in javascript
         assert 'groupKind === "mp"' in javascript
         assert "not an enumeration of every type-M extended PBP" in javascript
-        assert "selected half-row lengths count the -1/2 entries and sum to k" in javascript
+        assert "rows omitted from a label are the selected half-row lengths" in javascript
+        assert "count the -1/2 entries and sum to k" in javascript
         assert 'const heading = element("h3")' not in javascript
         assert "final-orientation" not in javascript
         assert "pathHistoryPreview(path.realizations)" in javascript

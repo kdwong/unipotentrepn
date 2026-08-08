@@ -16,6 +16,13 @@ http://127.0.0.1:8000/
 Enter the all-even orbit and click **Calculate**.  The final real form is
 always `SO(n,n+1)`; the opposite orientation is not calculated.
 
+For the `Mp(2n,R)` calculator, rows of the dual orbit are numbered from
+bottom to top and a path is labelled by the complement of its computational
+row subset.  Thus, for `O^vee=(6,4,2)`, the computational subsets `{1}` and
+`{1,3}` are displayed as `Path {2,3}` and `Path {2}`, respectively.  This is
+only a naming convention: the underlying theta chain, painted bipartition,
+and associated cycle are unchanged.
+
 Each `k` section shows:
 
 1. the exact right-trivial targets of degrees `k` and `p-k`;

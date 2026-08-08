@@ -526,7 +526,7 @@ def _serialize_metaplectic_pbp(
 def _serialize_metaplectic_path(
     path: MetaplecticConcretePath,
 ) -> dict[str, Any]:
-    """Serialize one subset-labelled M-ending concrete twist history."""
+    """Serialize one complement-labelled M-ending concrete twist history."""
 
     subset_slug = "-".join(map(str, path.subset_indices)) or "empty"
     steps = list(path.display_steps)
@@ -540,9 +540,11 @@ def _serialize_metaplectic_path(
         "stable_id": f"mp-path-subset-{subset_slug}",
         "name": path.name,
         "number": path.number,
-        "subset_bits": list(path.subset_bits),
+        "subset_bits": list(path.label_subset_bits),
         "subset_indices": list(path.subset_indices),
         "subset_label": path.subset_label,
+        "selected_subset_bits": list(path.subset_bits),
+        "selected_subset_indices": list(path.selected_subset_indices),
         "selected_half_row_sum": path.selected_half_row_sum,
         "target_label": path.final_weight_text,
         "left_degree": path.fine_degree,
